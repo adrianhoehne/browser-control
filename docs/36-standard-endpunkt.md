@@ -120,8 +120,9 @@ Aus den Dateien gelesen, nicht geschätzt:
    Feld, dass die URL nur für eine Bridge auf einem anderen Rechner geändert
    wird, und der Platzhalter zeigt keine konkrete Fremdadresse mehr. Beweis:
    `grep -c 'example.com' extension/options.html` ⇒ **0** (Exit 1);
-   `grep -ciE 'andere[mnr]?[[:space:]]+Rechner' extension/options.html` ⇒ **≥ 1**
-   (die Beugung ist offen; `grep -c` zählt Zeilen, und der Hinweis bricht um);
+   `tr '\n' ' ' < extension/options.html | grep -ciE 'andere[mnr]?[[:space:]]+Rechner'`
+   ⇒ **≥ 1** (die Beugung ist offen; `grep` zählt Zeilen, `tr` macht aus dem
+   umbrochenen Hinweis eine Zeile);
    dazu `INSTALL.md`, mit **demselben** Schnitt wie im Plan:
    `sed -n '/^## 4\. Browser/,/^## 5\./p' INSTALL.md | grep -Fc 'is pre-filled with'`
    ⇒ **1** (der längere Anker, weil die Adresse in §4 schon steht — ein
@@ -140,7 +141,7 @@ Aus den Dateien gelesen, nicht geschätzt:
    `INSTALL.md`, `docs/…` und **keine** ungetrackte Datei;
    `git diff HEAD -- bridge/` ⇒ **leer** (die Bridge wird nur **gelesen**, nicht
    geändert).
-9. **Kein Geheimnis.** Beweis:
+9. **Kein Geheimnis. Wächter, heute schon grün.** Beweis:
    `git grep --untracked -nE '[0-9a-f]{32,}' -- .` ⇒ keine Ausgabe, Exit 1.
 
 ## Dev plan
@@ -207,7 +208,7 @@ Proof:
 ```
 node --test --test-reporter=tap --test-name-pattern='^endpoint_default_isTheSameInOptionsAndBackground$' test/extension.test.js | grep -cE '^ok [0-9]+ - endpoint_default_isTheSameInOptionsAndBackground'   # ⇒ 1
 grep -c 'example.com' extension/options.html; echo $?   # ⇒ 0, Exit 1
-grep -c 'anderer Rechner' extension/options.html        # ⇒ 1
+tr '\n' ' ' < extension/options.html | grep -ciE 'andere[mnr]?[[:space:]]+Rechner'   # ⇒ 1
 ```
 
 **4. Unsinn bleibt ein Fehler — und der Gesamtlauf.** (Umsetzer)
@@ -233,8 +234,9 @@ npm run check; echo $?   # ⇒ 0
 previous spec docs` genannten Stellen (Ziel-Absatz, `## Configuration`-Zeile
 zum `endpoint`, die drei „ohne Endpunkt/Token"-Stellen) werden auf „ohne
 **Token** kein Versuch; ohne Endpunkt der Standard" gezogen. Proof:
-`grep -c 'ohne Endpunkt' docs/01-skelett-verbindung-und-status.md; echo $?`
-⇒ **0, Exit 1**; `grep -ciE 'ohne Token' docs/01-skelett-verbindung-und-status.md`
+`grep -cE 'ohne (gespeicherten )?Endpunkt' docs/01-skelett-verbindung-und-status.md; echo $?`
+⇒ **0, Exit 1**; `grep -cE 'bei fehlendem Endpunkt' docs/01-skelett-verbindung-und-status.md; echo $?`
+⇒ **0, Exit 1**; `grep -ciE 'ohne Token|fehlendem Token' docs/01-skelett-verbindung-und-status.md`
 ⇒ **≥ 1**.
 
 **5. `INSTALL.md` (englisch).** (Umsetzer)
@@ -245,7 +247,7 @@ ein leeres Feld schweigt nach dieser Änderung nicht mehr.
 
 Proof:
 ```
-sed -n '/^## 4\. Browser/,/^## 5\./p' INSTALL.md | grep -Fc 'ws://127.0.0.1:8110'   # ⇒ 1
+sed -n '/^## 4\. Browser/,/^## 5\./p' INSTALL.md | grep -Fc 'is pre-filled with'   # ⇒ 1
 sed -n '/^## 4\. Browser/,/^## 5\./p' INSTALL.md | grep -ciE 'another machine|other machine'   # ⇒ ≥ 1
 grep -Fc 'endpoint or token empty' INSTALL.md; echo $?   # ⇒ 0, Exit 1
 ```
@@ -280,7 +282,7 @@ grep -Fc 'endpoint or token empty' INSTALL.md; echo $?   # ⇒ 0, Exit 1
 
 1 → 2 → 3 → 4 → 5, dann 6 (Orchestrator: `status: active`, `docs/README.md`,
 `docs/PROJECT-STATE.md`). Stufe 2 und 3 brauchen den Standard aus Stufe 1;
-Stufe 4 braucht alle fünf Fälle, um auf **5** zu zählen. Stufe 5 ist vom Code
+Stufe 4 braucht alle vier Fälle, um auf **4** zu zählen. Stufe 5 ist vom Code
 unabhängig, nennt aber denselben Wert.
 
 ### What the next increment inherits
@@ -303,9 +305,10 @@ Diese Spec löst **eine Zusage** von `docs/01-skelett-verbindung-und-status.md`
 
 | Datei | Stelle | alt | neu |
 |---|---|---|---|
-| `docs/01-…` | `## Ziel`, Zeile ~121 | „Ohne gespeicherten Endpunkt oder ohne Token wählt sich die Extension nicht raus und schreibt das einmal" | „Ohne **Token** wählt sie sich nicht raus und schreibt das einmal; ein leerer Endpunkt ist `ws://127.0.0.1:8110` (`docs/36`)" |
+| `docs/01-…` | `## Wire-Protokoll`, zitiert in `## Ziel` (~121) | „Ohne gespeicherten Endpunkt oder ohne Token wählt sich die Extension nicht raus und schreibt das einmal" | „Ohne **Token** wählt sie sich nicht raus und schreibt das einmal; ein leerer Endpunkt ist `ws://127.0.0.1:8110` (`docs/36`)" |
 | `docs/01-…` | `## Configuration`, Zeile ~194 | `endpoint \| (leer) \| wss://example.com/…; leer = keine Verbindung` | `endpoint \| ws://127.0.0.1:8110 \| leer ⇒ Standard; gespeicherte Werte, auch wss://…, gewinnen (docs/36)` |
 | `docs/01-…` | `## Testing` (~265), Dev-Plan-Proof (~448), `## Log` S2 (~799) | „ohne Endpunkt/Token kein Verbindungsversuch" | „ohne **Token** kein Verbindungsversuch; ohne Endpunkt der Standard" |
+| `docs/01-…` | ~444, Meldungstext | „einmalig die Meldung bei fehlendem Endpunkt oder Token" | „einmalig die Meldung bei fehlendem **Token**" |
 
 `docs/01` bleibt `active`; die Zeilen werden in **Stufe 1** mitgezogen (die
 Stufe, die das Verhalten ändert, `docs/README.md`).
