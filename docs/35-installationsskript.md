@@ -598,8 +598,8 @@ Minor, vier Nits — **alle übernommen**; die Einzelzeilen stehen in `## Log`.
 - **Runde 1 — B1 übernommen:** die Test-`PATH` enthielt kein `node`; jetzt
   `path.dirname(process.execPath)` plus Stub-Reihenfolge.
 - **Runde 1 — B2 übernommen:** `mkdir -p` legt `~/.config` an, also Elternpfade
-  in die erlaubte Menge; `~/.local/state` fällt weg, es wird von keiner Stufe
-  geschrieben.
+  in die erlaubte Menge; der frühere dritte Ort (State-Verzeichnis) fällt weg,
+  weil ihn keine Stufe schreibt.
 - **Runde 1 — B3 übernommen:** das 32-Zeichen-Fixture wird zur Laufzeit gebaut
   (`"ab".repeat(16)`), sonst wird der Secret-Grep der eigenen Stufe rot.
 - **Runde 1 — M1 übernommen:** der Beleg-Baukasten nennt den Datei-Operanden
