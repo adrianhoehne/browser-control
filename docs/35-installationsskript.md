@@ -6,8 +6,7 @@ status: proposed
 # Das Installationsskript
 
 Die Einrichtung der Server-Seite besteht heute aus den Befehlen in
-`INSTALL.md` §2 (Token) und §3 (Unit, Dienst) — zwölf sind es ohne die
-Prüfblöcke, mit ihnen mehr. Sie sind einzeln richtig, aber in der falschen
+`INSTALL.md` §2 (Token) und §3 (Unit, Dienst). Sie sind einzeln richtig, aber in der falschen
 Reihenfolge gefährlich (Dienst vor Token ⇒ Exit 2) und in der Summe
 fehleranfällig. Diese Spec bündelt sie in **einem** Befehl.
 
@@ -51,6 +50,8 @@ fehlt.
 - **Keine Token-Rotation.** Das Skript legt ein Token an, wenn keins da ist;
   ein vorhandenes rührt es nicht an.
 - **Kein `git clone`.** Das Skript läuft aus dem Klon.
+- **Kein `loginctl enable-linger`.** Ob der Dienst ohne Login laufen soll, bleibt
+  eine Entscheidung des Betreibers (`INSTALL.md` §3), nicht eine des Skripts.
 - **Kein zweiter Installationsweg.** Wer die Einzelbefehle will, findet sie
   weiter in `INSTALL.md`; das Skript ersetzt sie nicht als Wahrheit, sondern
   bündelt sie.
@@ -78,8 +79,9 @@ fehlt.
 | `--help` | die Optionen und was sie tun |
 
 **Exit-Codes:** `0` Erfolg; `1` der Lauf wurde abgebrochen — Vorprüfung
-gescheitert (Node, Repo-Pfad, `$HOME`, Ports), unbekannte Option, oder der
-Dienst ist nach dem Start nicht `active`; `2` Token fehlt oder ist zu kurz —
+gescheitert (Node, Repo-Pfad, `$HOME`, Ports), unbekannte Option, der Dienst
+nach dem Start nicht `active`, oder ein Schreibziel außerhalb der erlaubten
+Menge (`guard_path`); `2` Token fehlt oder ist zu kurz —
 derselbe Code, den die Bridge für denselben Zustand benutzt. Die Meldung sagt
 jeweils, welche der Ursachen es war; die Zahl allein ist absichtlich grob.
 
@@ -98,6 +100,7 @@ Schritt — bei einem handgestarteten Bridge aus `INSTALL.md` §3 ist das
 | `test/install.test.js` | `install_withOldNode_abortsBeforeWriting` | fehlendes Node oder Major < 22 ⇒ Exit `1`, keine Datei |
 | `test/install.test.js` | `install_withOpenPort_abortsBeforeWriting` | belegter Port ⇒ Exit `1`, Meldung mit Port und PID, kein Token |
 | `test/install.test.js` | `install_withMissingUnitTarget_abortsBeforeWriting` | Klon nicht unter `~/browser-control` ⇒ Exit `1`, Meldung nennt beide Pfade |
+| `test/install.test.js` | `install_guardPathRejectsAPathOutsideTheAllowedSet` | der Pfadwächter bricht bei `/etc/passwd` mit Exit `1` ab |
 | `test/install.test.js` | `install_withUnknownOption_printsHelpAndExitsOne` | unbekannte Option ⇒ Kurzhilfe, Exit `1`, nichts geschrieben |
 | `test/install.test.js` | `install_withUnwritableHome_abortsBeforeWriting` | `$HOME` nicht beschreibbar ⇒ Exit `1`, keine Datei |
 | `test/install.test.js` | `install_withLooseTokenPermissions_reportsWithoutFixing` | Token mit `644` wird **gemeldet**, nicht stillschweigend korrigiert |
@@ -117,8 +120,11 @@ Schritt — bei einem handgestarteten Bridge aus `INSTALL.md` §3 ist das
 | `bash -n scripts/install.sh` | Exit 0 | Syntax |
 
 Die Tests fahren das Skript als **Prozess** mit einem temporären `HOME` und einem
-**Stub-Verzeichnis am Anfang von `PATH`** (`systemctl`, `ss`, `openssl`) — nichts
-am echten System. `test/install.test.js` ist neu; das Skript selbst bindet keinen
+**Stub-Verzeichnis am Anfang von `PATH`** (`systemctl`, `ss`, `openssl`, dazu ein
+`node`-Stub mit `v20` für den alten-Node-Fall) — nichts am echten System. Die
+Stub-Antworten werden **je Fall** über die Umgebung gesetzt
+(`BC_INSTALL_STUB_SS`, `BC_INSTALL_STUB_IS_ACTIVE`, `BC_INSTALL_STUB_MAINPID`);
+`runInstall(sandbox, args, extraEnv = {})` reicht sie durch. `test/install.test.js` ist neu; das Skript selbst bindet keinen
 Port, `test/ports.js` bleibt unberührt.
 
 ## Acceptance criteria
@@ -130,11 +136,12 @@ ohne ihn liest `grep` stdin und zählt immer `0`) — **und** dass er grün läu
 ⇒ **1**. Ein Name im Text beweist nichts.
 
 1. **Ein Befehl richtet ein.** Auf leerem, temporärem `HOME` (mit Stubs)
-   hinterlässt `./scripts/install.sh`: Tokendatei `600`/65 Zeichen, Unit unter
+   hinterlässt `./scripts/install.sh`: Tokendatei `600` mit 65 Bytes, Unit unter
    `~/.config/systemd/user/`, und `systemctl --user daemon-reload` sowie
    `enable --now browser-control` wurden gerufen, danach `is-active`.
    Beweis: `install_installsAndStartsTheUnit` **und**
-   `install_createsTokenWithTightPermissions` (Datei `600`, 65 Bytes).
+   `install_createsTokenWithTightPermissions` (Datei `600`, 65 Bytes = 64
+   Hex-Zeichen plus Zeilenumbruch).
 2. **Idempotent, Token unangetastet.** Zweiter Lauf: Tokendatei byte-gleich
    (`sha256`), Unit nicht neu geschrieben (`mtimeNs`), `openssl` genau einmal.
    Beweis: `install_withAnExistingToken_doesNotTouchIt`, `install_isIdempotent`.
@@ -159,8 +166,9 @@ ohne ihn liest `grep` stdin und zählt immer `0`) — **und** dass er grün läu
    `/usr/bin` liegt; ohne das Flag entsteht kein Drop-in. Beweis:
    `install_fixPathWritesTheDropInOnlyWhenNeeded`.
 9. **Nichts außerhalb der drei Orte, kein `sudo`.** Dynamisch: jede neue Datei
-   liegt unter `~/.config/browser-control/`, `~/.config/systemd/user/` oder
-   `~/.local/state/browser-control/` (`install_writesOnlyUnderHome`).
+   liegt unter `~/.config/browser-control/` oder `~/.config/systemd/user/`
+   samt `browser-control.service.d/` — dazu die Eltern `~/.config` und
+   `~/.config/systemd`, die `mkdir -p` anlegt (`install_writesOnlyUnderHome`).
    Statisch: der Wächter ist **falsifizierbar** — das Skript lässt sich
    quellen (`if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi`) und ein
    Fall ruft `guard_path /etc/passwd` ⇒ Exit `1`. Dazu
@@ -194,8 +202,8 @@ ohne ihn liest `grep` stdin und zählt immer `0`) — **und** dass er grün läu
 
 ## Dev plan
 
-**Der Zuschnitt.** Eine neue Datei `scripts/install.sh` bündelt die vierzehn
-Befehle aus `INSTALL.md` §2/§3 zu einem Lauf, und eine neue Testdatei
+**Der Zuschnitt.** Eine neue Datei `scripts/install.sh` bündelt die Schritte aus
+`INSTALL.md` §2/§3 zu einem Lauf, und eine neue Testdatei
 `test/install.test.js` fährt sie als Prozess mit temporärem `HOME` und Stubs.
 Kein Produktcode im engeren Sinn, kein `package.json`-Eingriff, keine neue
 Abhängigkeit.
@@ -251,8 +259,8 @@ Abhängigkeit.
 Funktionen mit Pfadwächter — `ensure_dir(path, mode)` und
 `put_file(path, mode)` —, die vor dem Schreiben prüfen, dass `path` unter
 `$HOME/.config/browser-control/`, `$HOME/.config/systemd/user/` (inkl.
-`browser-control.service.d/`) oder `$HOME/.local/state/browser-control/` liegt,
-und sonst mit Exit `1` abbrechen. Nur so ist „nichts außerhalb der drei Orte"
+`browser-control.service.d/`) oder deren Eltern `$HOME/.config` und
+`$HOME/.config/systemd` liegt, und sonst mit Exit `1` abbrechen. Nur so ist „nichts außerhalb der drei Orte"
 eine Eigenschaft des Codes.
 
 ---
@@ -283,10 +291,13 @@ Dateien: `scripts/install.sh` (neu), `test/install.test.js` (neu).
 - `test/install.test.js`: `makeSandbox(t)` → `{ root, home, stubs, logPath }`
   (`mkdtempSync`, `home/browser-control/bridge/bridge.mjs` angelegt,
   `t.after` räumt auf); `writeStub(dir, name, body)` (Modus `0o755`);
-  `runInstall(sandbox, args)` = `spawnSync(BASH, [SCRIPT, ...args], { env: {
-  HOME, PATH: [stubs, path.dirname(process.execPath), "/usr/bin", "/bin"].join(":"),
-  BC_INSTALL_STUB_LOG }, encoding: "utf8" })` — nur diese Variablen, nie
-  `process.env`. **`path.dirname(process.execPath)` ist Pflicht:** auf diesem
+  `runInstall(sandbox, args, extraEnv = {})` = `spawnSync(BASH, [SCRIPT, ...args],
+  { env: { HOME, PATH: [stubs, path.dirname(process.execPath), "/usr/bin", "/bin"].join(":"),
+  BC_INSTALL_STUB_LOG, ...extraEnv }, encoding: "utf8" })` — nur diese
+  Variablen, nie `process.env`; die Stub-Antworten (`BC_INSTALL_STUB_SS`,
+  `BC_INSTALL_STUB_IS_ACTIVE`, `BC_INSTALL_STUB_MAINPID`) kommen über
+  `extraEnv` je Fall. Jeder Fall ist ein **Top-Level**-`test("install_…"`
+  (Spalte 0), sonst liest der Beleg `^test\("` ihn nicht. **`path.dirname(process.execPath)` ist Pflicht:** auf diesem
   Host liegt `node` nicht in `/usr/bin`, ohne diesen Eintrag fände jeder
   Happy-Path-Lauf kein Node und endete mit Exit `1`. Der `v20`-Stub liegt im
   Stub-Verzeichnis und gewinnt durch die Reihenfolge. `readTree(home)` gehört
@@ -311,15 +322,18 @@ Dateien: `scripts/install.sh` (neu), `test/install.test.js` (neu).
   Exit `1`, Meldung mit Port und PID, kein Token),
   `install_withMissingUnitTarget_abortsBeforeWriting` (Sandbox ohne
   `home/browser-control` ⇒ Exit `1`, keine Datei, Meldung nennt beide Pfade),
-  `install_dryRunWritesNothing` (Exit `0`, Schritte genannt, `readTree` gleich,
-  kein `systemctl`).
+  `install_withUnknownOption_printsHelpAndExitsOne`,
+  `install_withUnwritableHome_abortsBeforeWriting`,
+  `install_guardPathRejectsAPathOutsideTheAllowedSet` (Skript quelbar, Wächter
+  direkt auf `/etc/passwd` ⇒ Exit `1`), `install_dryRunWritesNothing` (Exit `0`,
+  Schritte genannt, `readTree` gleich, kein `systemctl`).
 
 Proof:
 
 ```
 bash -n scripts/install.sh; echo $?                                    # ⇒ 0
-node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 7
-node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_(help|withOldNode|withOpenPort|withMissingUnitTarget|dryRun|withUnknownOption|withUnwritableHome)'   # ⇒ 7
+node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 8
+node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_(help|withOldNode|withOpenPort|withMissingUnitTarget|dryRun|withUnknownOption|withUnwritableHome|guardPath)'   # ⇒ 8
 ```
 
 ---
@@ -346,12 +360,14 @@ Dateien: `scripts/install.sh`, `test/install.test.js`.
   gebaut** — `"ab".repeat(16)`, denn ein 32-Hex-Literal macht den Secret-Grep
   der Abnahme rot — ⇒ Exit `0`, Hinweis, Datei unverändert);
   `install_printTokenPrintsOnlyTheToken` (`stdout` ist die Tokendatei, keine
-  `systemctl`-Zeile; ohne Token Exit `2`).
+  `systemctl`-Zeile; ohne Token Exit `2`);
+  `install_withLooseTokenPermissions_reportsWithoutFixing` (Token `644` ⇒
+  Meldung, Modus bleibt `644`).
 
 Proof:
 
 ```
-node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 13
+node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 14
 git grep --untracked -nE '[0-9a-f]{32,}' -- scripts/install.sh test/install.test.js              # keine Ausgabe, Exit 1
 ```
 
@@ -378,7 +394,7 @@ Dateien: `scripts/install.sh`, `test/install.test.js`.
 Proof:
 
 ```
-node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 15
+node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 16
 node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_(installsAndStartsTheUnit|isIdempotent)'   # ⇒ 2
 ```
 
@@ -405,7 +421,7 @@ Dateien: `scripts/install.sh`, `test/install.test.js`.
 Proof:
 
 ```
-node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 17
+node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 18
 node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_(uninstall|fixPath)'   # ⇒ 2
 ```
 
@@ -428,9 +444,9 @@ Dateien: `test/install.test.js` (`readTree()`, `sha256()`, `textFilesUnder()`);
 Proof:
 
 ```
-node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 19
-grep -c 'sudo' scripts/install.sh                                                                # ⇒ 0
-grep -cE '(>|>>)[[:space:]]*/(etc|usr|var|opt|srv|root)' scripts/install.sh                      # ⇒ 0
+node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 20
+grep -c 'sudo' scripts/install.sh; echo $?                                                       # ⇒ 0, Exit 1
+grep -cE '(>|>>)[[:space:]]*/(etc|usr|var|opt|srv|root)' scripts/install.sh; echo $?             # ⇒ 0, Exit 1
 ```
 
 ---
@@ -509,7 +525,9 @@ Acht Punkte waren nicht so prüfbar, wie sie dastanden; sie sind in
   Zusätzlich ein Fall mit `-p`-loser Ausgabe, damit „Besitzer nicht
   ermittelbar" nicht in einen `set -u`-Abbruch läuft.
 - **Der tokenförmige String im Repo.** Ein fest verdrahtetes 64-Hex-Token im
-  Stub macht den Secret-Grep der Abnahme rot → Laufzeit-Erzeugung.
+  Stub macht den Secret-Grep der Abnahme rot — **und die 32-Zeichen-Grenze
+  genügt schon**: der Grep schlägt ab 32 Hex-Zeichen an. Beide Fixtures werden
+  deshalb zur Laufzeit gebaut.
 - **Sandbox ohne Klon.** Ohne `home/browser-control/bridge/bridge.mjs` scheitert
   jede Stufe an der Vorprüfung → `makeSandbox` legt es an, und
   `install_writesOnlyUnderHome` zählt nur **neue** Einträge.
