@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Browser Control — Einstellungen</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0 auto;
+        max-width: 32rem;
+        padding: 1.5rem;
+      }
+      p.hint {
+        color: #444;
+        line-height: 1.4;
+      }
+      form {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+      input {
+        font-family: ui-monospace, monospace;
+        padding: 0.4rem;
+      }
+      /* A checkbox is no text field: the shared padding would stretch it. */
+      input[type="checkbox"] {
+        font-family: inherit;
+        padding: 0;
+        margin-right: 0.4rem;
+      }
+      label.checkbox {
+        align-items: center;
+        display: flex;
+      }
+      button {
+        align-self: flex-start;
+        margin-top: 0.8rem;
+        padding: 0.4rem 1.2rem;
+      }
+      #status {
+        min-height: 1.2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Browser Control</h1>
+    <p class="hint">
+      Endpunkt der Bridge und dasselbe Token wie auf dem Server. Bleibt eines von
+      beiden leer, baut die Extension bewusst keine Verbindung auf.
+    </p>
+
+    <form id="settings-form">
+      <label for="endpoint">Endpunkt-URL</label>
+      <input
+        id="endpoint"
+        name="endpoint"
+        type="text"
+        spellcheck="false"
+        autocomplete="off"
+        placeholder="wss://example.com/browser-control/ws"
+      />
+
+      <label for="token">Token</label>
+      <input id="token" name="token" type="password" spellcheck="false" autocomplete="off" />
+
+      <label class="checkbox" for="allowPasswordFields">
+        <input id="allowPasswordFields" name="allowPasswordFields" type="checkbox" />
+        Passwortfelder erlauben
+      </label>
+      <p class="hint">
+        Ist die Option aus, lehnt der Agent jedes Feld mit
+        <code>type="password"</code> ab, ohne etwas hineinzuschreiben. Der Wert
+        wird bei jedem Aufruf gelesen, ein Umstellen wirkt also sofort.
+      </p>
+
+      <label class="checkbox" for="allowEval">
+        <input id="allowEval" name="allowEval" type="checkbox" />
+        Code-Auswertung erlauben
+      </label>
+      <p class="hint">
+        Ist die Option an, darf der Agent beliebigen Code im Seitenkontext
+        ausführen. Der Code kommt damit an dieselben Daten wie die Seite selbst,
+        einschließlich <code>document.cookie</code> (aber nicht der
+        <code>HttpOnly</code>-Cookies), <code>localStorage</code> und
+        <code>fetch</code> mit den Cookies dieses Profils. Er darf die Seite
+        <strong>ändern</strong> und hebt die Sperre für
+        <strong>Passwortfelder</strong> auf. Ein Code, der nie zurückkehrt, kann
+        den Tab <strong>einfrieren</strong>; nur Schließen des Tabs hilft dann.
+        Der Wert wird bei jedem Aufruf gelesen, ein Umstellen wirkt also sofort.
+      </p>
+
+      <label class="checkbox" for="allowScreenshot">
+        <input id="allowScreenshot" name="allowScreenshot" type="checkbox" />
+        Bildschirmfotos erlauben
+      </label>
+      <p class="hint">
+        Ist die Option aus, lehnt der Agent jede Aufnahme ab. Ist sie an, sieht
+        er den <strong>sichtbaren Ausschnitt</strong> des Agenten-Tabs als Bild —
+        also genau das, was auf dem Bildschirm steht: das eingeloggte Profil mit
+        Postfach, Warenkorb oder Kontodaten. Verdeckte Tabs und andere Fenster
+        sind nicht im Bild. Der Wert wird bei jedem Aufruf gelesen, ein
+        Umstellen wirkt also sofort.
+      </p>
+
+      <button type="submit">Speichern</button>
+    </form>
+
+    <p id="status" role="status"></p>
+
+    <!-- No inline script: the MV3 CSP forbids it, so the page loads options.js. -->
+    <script src="options.js"></script>
+  </body>
+</html>
