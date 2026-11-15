@@ -126,6 +126,7 @@ gibt** — das ist bei ihr erlaubt und sonst nicht. Die erste ist
 | `33-spurwahl.md` | `browser_transcript`, Teil 2: die Sprachspur aus der **Spurendatei** — Originalspur über den Original-Audiotrack, die en/de-Regel des Betreibers, Wahl im Untertitel-Menü nach dem Namen aus dem Modell, Lesen der signierten `api/timedtext`-Adresse, danach Spur und Abspielposition zurückstellen. **`active`:** live abgenommen am 2026-11-12 (englisch und japanisch) | `active` |
 | `34-spurendatei-beobachten.md` | Teil 2b von `browser_transcript`: die signierte `api/timedtext`-Adresse nicht aus `performance` lesen (live blind, `docs/33`, M18), sondern selbst mitschneiden — `webRequest`-Berechtigung, aufgenommen je Tab (gedeckelt), gelesen nur der Agenten-Tab, nur youtube.com, Adresse bleibt in der Extension. **`active`:** beide Live-Kriterien am 2026-11-12 grün | `active` |
 | `35-installationsskript.md` | Ein Installationsskript für die Server-Seite: Token, systemd-Unit, Dienststart und Prüfung in einem Befehl — idempotent, ohne Firefox-Automatisierung, ohne `sudo`; die vier Schritte in der Extension bleiben Handarbeit | `proposed` |
+| `36-standard-endpunkt.md` | Ein Standard-Endpunkt für die Extension: ein leeres Feld verbindet nach `ws://127.0.0.1:8110` (die Vorgabe der Bridge), sichtbar vorbelegt und änderbar; gespeicherte Endpunkte bleiben unberührt, keine Discovery | `proposed` |
 
 Meta-Datei dieses Ordners (`README.md`) trägt bewusst kein Frontmatter: sie ist
 Verfahren, keine Spec.
