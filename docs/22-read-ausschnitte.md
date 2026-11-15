@@ -157,7 +157,7 @@ Fünf Objektvergleiche der bestehenden `read`-Fälle ziehen die drei Felder nach
 
 ## Acceptance criteria
 
-**Ausnahme mit Datum** (2026-10-27, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 9 ist
+**Ausnahme mit Datum** (2026-10-27, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 9 ist
 live und nach dem Commit zu messen (Reload der Erweiterung, ein langer Artikel im
 Agenten-Tab); fällt es rot aus, wird vorwärts korrigiert und die rote Zeile steht
 unter `## Bekannte Lücken`.
@@ -370,7 +370,7 @@ Stufe entscheidet.
    Feststellung des Betreibers stehen. Registerspalten in `docs/README.md`,
    `docs/PROJECT-STATE.md` und die Zeile zu Roadmap 13 in `docs/ROADMAP.md` pflegt
    der Orchestrator bei der Abnahme. Die vier Abnahmebefehle aus `CONTRIBUTING.md`,
-   `## Abnahme` plus `git diff --exit-code extension/manifest.json` laufen hier zum
+   `## Acceptance` plus `git diff --exit-code extension/manifest.json` laufen hier zum
    ersten Mal über den ganzen Satz. Kriterium 9 ist **nicht** Sache des Umsetzers:
    es wird nach dem Commit im echten Profil gemessen (datierte Ausnahme,
    `## Messlauf`).

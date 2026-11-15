@@ -1,97 +1,95 @@
 # browser-control
 
-Eine Firefox-Erweiterung steuert den **sichtbaren, eingeloggten Browser** und
-eine kleine Bridge macht ihn als **MCP-Server** für Agenten nutzbar. Der Agent
-arbeitet in einem eigenen Tab, den du siehst — mit deinen Logins, deinen
-Cookies, deinem Profil. Kein Headless-Browser, kein zweites Profil, keine
-automatisierte Anmeldung.
+A Firefox extension drives your **visible, logged-in browser**, and a small
+bridge exposes that browser as an **MCP server** for agents. The agent works in
+its own tab — one you can watch — with your logins, your cookies and your
+profile. No headless browser, no second profile, no automated login.
 
 ```
-Agent  ──MCP über HTTP──▶  Bridge (Node)  ──WebSocket──▶  Firefox-Erweiterung
-        (Bearer-Token)    127.0.0.1:8111                   Agenten-Tab
+Agent  ──MCP over HTTP──▶  Bridge (Node)  ──WebSocket──▶  Firefox extension
+        (bearer token)     127.0.0.1:8111                  agent tab
 ```
 
-Die Erweiterung wählt sich **von innen** zur Bridge raus. Deshalb braucht die
-Bridge keinen eingehenden Port, und der Agent kann nur Tabs sehen, die er
-selbst angelegt hat.
+The extension dials **out** to the bridge. That is why the bridge needs no
+inbound port, and why the agent can only see tabs it created itself.
 
-## Was es kann
+## What it does
 
-**Dreizehn Werkzeuge**, alle mit dem Präfix `browser_`:
+**Thirteen tools**, all with the `browser_` prefix:
 
-| Werkzeug | Zweck |
+| Tool | Purpose |
 |---|---|
-| `status` | Fenster und Tabs als JSON, Agenten-Tabs markiert |
-| `navigate`, `read` | Seite öffnen (wartet auf Ruhe), Inhalt als Text lesen |
-| `click`, `type`, `focus` | bedienen, tippen, den Tab nach vorn holen |
-| `inspect` | DOM abfragen, Selektor und Attribute |
-| `open_tab`, `close_tab` | Agenten-Tabs verwalten (höchstens fünf) |
-| `eval` | Code im Seitenkontext (**standardmäßig aus**) |
-| `screenshot` | sichtbarer Ausschnitt (**standardmäßig aus**) |
-| `frames` | iframes auflisten und adressieren |
-| `transcript` | YouTube-Transkript als Segmente mit Zeitstempeln, in der Originalspur |
+| `status` | windows and tabs as JSON, agent tabs marked |
+| `navigate`, `read` | open a page (waits for it to settle), read its content as text |
+| `click`, `type`, `focus` | interact, type, bring the tab to the front |
+| `inspect` | query the DOM, selector and attributes |
+| `open_tab`, `close_tab` | manage agent tabs (at most five) |
+| `eval` | run code in the page context (**off by default**) |
+| `screenshot` | the visible part of the tab (**off by default**) |
+| `frames` | list and address iframes |
+| `transcript` | a YouTube transcript as segments with timestamps, in the video's original track |
 
-Dazu: Ruhe-Erkennung statt fester Wartezeiten, Shadow DOM und Frames,
-Persistenz über einen Hintergrund-Tab, und ein Log, das Seitentext nicht
-mitschreibt.
+Plus: settle detection instead of fixed sleeps, shadow DOM and frames,
+persistence across a background tab, and a log that does not copy page text.
 
-## Sicherheit
+## Security
 
-- **Ein Token**, das nur im Dateisystem des Betreibers liegt und nie ins Repo
-  gehört; die Bridge prüft es bei jeder MCP-Anfrage.
-- **Nur Loopback.** Der MCP-Port ist an `127.0.0.1` gebunden und gehört nicht
-  hinter einen öffentlichen Proxy.
-- **Drei Schalter**, alle aus per Voreinstellung: Passwortfelder, Code-
-  Auswertung, Bildschirmfotos. Der Agent schaltet sie nicht selbst um.
-- **Der Agent sieht nur seine eigenen Tabs.** Deine Tabs bedient er nicht.
+- **One token**, kept on the operator's filesystem and never in the repo; the
+  bridge checks it on every MCP request.
+- **Loopback only.** The MCP port is bound to `127.0.0.1` and does not belong
+  behind a public proxy.
+- **Three switches**, all off by default: password fields, code evaluation,
+  screenshots. The agent never flips them itself.
+- **The agent only sees its own tabs.** It does not drive yours.
 
-## Schnellstart
+## Quick start
 
-Die vollständige Anleitung steht in **[INSTALL.md](INSTALL.md)**: Token-Datei,
-Caddy-Pfad, Bridge als systemd-User-Dienst, Erweiterung temporär laden.
+The full guide is **[INSTALL.md](INSTALL.md)**: token file, bridge as a systemd
+user service, loading the extension. A reverse proxy is optional and covered at
+the end.
 
-Kurzfassung für einen Rechner ohne Proxy:
+Short version for one machine without a proxy:
 
 ```bash
-# 1. Token
-mkdir -p ~/.config/browser-control
+# 1. token
+install -d -m 700 ~/.config/browser-control
 openssl rand -hex 32 > ~/.config/browser-control/token
+chmod 600 ~/.config/browser-control/token
 
-# 2. Bridge als Dienst
+# 2. bridge as a service
 cp deploy/browser-control.service ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now browser-control
 
-# 3. Erweiterung: about:debugging#/runtime/this-firefox → „Temporäre
-#    Erweiterung laden…" → extension/manifest.json wählen, dann unter
-#    Add-on-Einstellungen Endpunkt und Token eintragen.
+# 3. extension: about:debugging#/runtime/this-firefox → "Load Temporary Add-on…"
+#    → pick extension/manifest.json, then set endpoint and token under Preferences.
 ```
 
-Die Erweiterung ist **unsigniert**. Nach einem Firefox-Neustart ist sie weg und
-muss neu geladen werden; Signierung über AMO ist nicht eingerichtet.
+The extension is **unsigned**. After a Firefox restart it is gone and has to be
+loaded again; signing through AMO is not set up.
 
-## Entwicklung
+## Development
 
-Es gibt **keine Abhängigkeiten** — Node ≥ 22 genügt:
+There are **no dependencies** — Node ≥ 22 is enough:
 
 ```bash
-npm test        # 736 Fälle, TAP-Ausgabe, ~90 s
-npm run check   # node --check über jede .js/.mjs
+npm test        # 736 cases, TAP output, ~90 s
+npm run check   # node --check over every .js/.mjs
 ```
 
-Wie Änderungen laufen (Spec → Gate → Dev-Plan → Review → Abnahme), steht in
-**[CONTRIBUTING.md](CONTRIBUTING.md)**; die Design- und Messgeschichte in
-[`docs/`](docs/README.md) — 34 Specs, jede mit ihren Messungen und den
-Entscheidungen, die daraus folgten.
+How changes happen (spec → gate → dev plan → review → acceptance) is described
+in **[CONTRIBUTING.md](CONTRIBUTING.md)**; the design and measurement history
+lives in [`docs/`](docs/README.md) — 34 specs, each with its measurements and the
+decisions that followed.
 
-## Bekannte Grenzen
+## Known limits
 
-- **Unsigned**: temporär zu laden, nach jedem Firefox-Neustart erneut.
-- **Windows** ist nur teilweise abgedeckt (`docs/29`, `docs/30`).
-- **YouTube-Etiketten können falsch sein**: `browser_transcript` liest die Spur,
-  die YouTube als Original ausgibt; Spracherkennung ist bewusst kein Ziel.
-- **Ein Betreiber, ein Browser**: die Bridge bedient die Erweiterung, die
-  verbunden ist.
+- **Unsigned**: temporary load, again after every Firefox restart.
+- **Windows** is only partly covered (`docs/29`, `docs/30`).
+- **YouTube labels can lie**: `browser_transcript` reads the track YouTube calls
+  the original; language detection is deliberately out of scope.
+- **One operator, one browser**: the bridge serves the extension that is
+  connected.
 
-## Lizenz
+## License
 
 [MIT](LICENSE).

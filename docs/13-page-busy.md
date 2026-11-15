@@ -137,7 +137,7 @@ Aufbau.
    und **nicht** in eine Vorwärts-Korrektur. Die **Kernannahme** ist erst
    widerlegt, wenn `page_busy` über mehrere Versuche **nie** erscheint.
 
-**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 6 ist
+**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 6 ist
 erst nach den Handgriffen messbar, und der Betreiber lädt die Erweiterung aus
 seinem eigenen Klon — also nach dem `git pull`. Kriterien 1–5 laufen vor dem
 Commit, Kriterium 6 danach. **Fällt Kriterium 6 rot aus, gilt die Regel aus dem

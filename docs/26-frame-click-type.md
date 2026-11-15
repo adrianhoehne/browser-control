@@ -87,7 +87,7 @@ fiele es dort lautlos raus.
 
 ## Acceptance criteria
 
-**Ausnahme mit Datum** (2026-10-28, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 4 ist live
+**Ausnahme mit Datum** (2026-10-28, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 4 ist live
 und nach dem Commit zu messen; **Kernannahme** ist Kriterium 4.
 
 1. **Ohne `frame` unverändert** (lokal). `click` und `type` injizieren weiter in

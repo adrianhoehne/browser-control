@@ -188,7 +188,7 @@ Host-Rechte (`<all_urls>` ist vorhanden), kein natives Paket.
 **Ausnahme mit Datum (2026-11-12).** Kriterium 8 und 9 sind nur im Profil des
 Betreibers messbar (Extension-Reload, ein Aufruf in einer pi-Sitzung). Sie
 werden **nach** dem Commit gemessen — die Ausnahme aus `CONTRIBUTING.md`,
-`## Abnahme`. Die Kriterien 1–7, 11 und 12 laufen davor. **Kriterium 10 ist
+`## Acceptance`. Die Kriterien 1–7, 11 und 12 laufen davor. **Kriterium 10 ist
 der Sonderfall:** fällt 8 rot aus, ist die Kernannahme widerlegt und die Spec
 geht zurück.
 
@@ -247,7 +247,7 @@ unangetastet; MV2 mit `persistent: true`; `webRequest` **ohne**
   (Stufe 2). Die betroffenen Fälle treiben die Uhr selbst
   (`clock.runByDelay(TRANSCRIPT_CAPTION_DEADLINE_MS)`), und die Suite prüft
   `# cancelled 0`, weil ein hängender Fall bei `# fail 0` grün bliebe
-  (`CONTRIBUTING.md`, `## Abnahme`).
+  (`CONTRIBUTING.md`, `## Acceptance`).
 - `pageContextOf` gibt dem Transkript-Realm heute genau zwei Zusätze:
   `performance.getEntriesByType` und `fetch`; `createTranscriptPage({ resources })`
   und `transcriptResourceOf`/`createTranscriptResources` liefern die Adressen.
@@ -440,7 +440,7 @@ Zahlen aus Stufe 2/3 sind **gewählt**; der Mitschnitt hört auch die eigene
 `fetch`-Anfrage; Worker ungemessen), `## Amendments` ausführen und **entfernen**,
 Prosa beschreibend, `status: active`; `docs/README.md` (Statuszeile 33 und 34),
 `docs/PROJECT-STATE.md` pflegen; committen. Danach die Ausnahme mit Datum
-(`CONTRIBUTING.md`, `## Abnahme`): Kriterien 8 und 9 im Profil des Betreibers. Fällt 8
+(`CONTRIBUTING.md`, `## Acceptance`): Kriterien 8 und 9 im Profil des Betreibers. Fällt 8
 rot aus, ist die Kernannahme widerlegt → zurück in `## Open questions`
 (Kriterium 10).
 

@@ -218,7 +218,7 @@ Neustart. Beide Codes bekommen einen Fall in `test/bridge.test.js`
    `Authorization`-Header, stdio über `command`), damit ein Client, der nur spawnt,
    nicht ausgeschlossen ist.
 
-**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 6 ist nur
+**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 6 ist nur
 im Betreiber-Profil entscheidbar (systemd-Unit, zwei Sitzungen) und läuft nach dem
 Commit. Kriterien 1–5 laufen vorher. Ist die **Kernannahme** widerlegt (der Dienst
 lässt sich nicht als User-Unit betreiben, oder pi verbindet sich nicht über

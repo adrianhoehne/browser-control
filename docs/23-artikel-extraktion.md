@@ -166,7 +166,7 @@ soll nicht „Debug-Ausgabe bleibt gleich" bedeuten.
 
 ## Acceptance criteria
 
-**Ausnahme mit Datum** (2026-10-27, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 8 ist
+**Ausnahme mit Datum** (2026-10-27, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 8 ist
 live und nach dem Commit zu messen (Reload der Erweiterung, ein echter Artikel).
 Fällt die **Messung** daneben (Größenordnung, ein Chrome-String, die Zeit), wird
 vorwärts korrigiert und die rote Zeile steht unter `## Bekannte Lücken`. Ist die
@@ -415,7 +415,7 @@ zuerst) → Bereinigung → Fenster → MCP → Abschluss. Kriterien in Klammern
 8. **Abschluss** (9; 8 ist **nicht** Sache des Umsetzers) —
    `docs/23-artikel-extraktion.md`: `status: active`, Prosa beschreibend, der
    beantwortete `## Open questions`-Block bleibt als Feststellung stehen. Die vier
-   Abnahmebefehle aus `CONTRIBUTING.md`, `## Abnahme`, plus `git diff --exit-code
+   Abnahmebefehle aus `CONTRIBUTING.md`, `## Acceptance`, plus `git diff --exit-code
    extension/manifest.json`. Kriterium 8 ist live und laut datierter Ausnahme
    **nach** dem Commit zu messen; die Zahlen trägt der Orchestrator in einen
    Abschnitt `## Messlauf` ein, den die Spec heute nur zitiert, aber nicht

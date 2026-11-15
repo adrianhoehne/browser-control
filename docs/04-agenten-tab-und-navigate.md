@@ -245,7 +245,7 @@ bleiben wörtlich, wie sie sind.
    `https://example.org/` auf; Beleg ist die Antwort mit `complete: true`, die
    Logzeile aus `## Hub` und ein sichtbarer Agenten-Tab im Profil.
 
-   **Ausnahme mit Datum** (2026-10-23, wie in `CONTRIBUTING.md`, `## Abnahme`
+   **Ausnahme mit Datum** (2026-10-23, wie in `CONTRIBUTING.md`, `## Acceptance`
    vorgesehen): Kriterium 6 ist erst nach (a) und (b) messbar. Die Kriterien 1–5
    laufen vor dem Commit, Kriterium 6 danach; fällt es rot aus, wird vorwärts
    korrigiert und die rote Zeile steht mit Datum unter `## Bekannte Lücken`.
@@ -496,7 +496,7 @@ Stand 2026-10-23, vor der Umsetzung:
   sind unter der Regel nicht unterscheidbar.
 - **Kriterium 6 ist erst nach dem Commit messbar** (Reload der Extension, dann
   pi neu starten); die begründete Ausnahme steht dort und in `CONTRIBUTING.md`,
-  `## Abnahme`.
+  `## Acceptance`.
 - **Kein Lesen des Seiteninhalts, kein Klick, kein Screenshot** — bewusst, siehe
   `## Non-goals`; Inkrement 5 braucht dafür eine Berechtigungsentscheidung.
 - **`complete:false` bei langsamen Hintergrund-Tabs** bleibt ein reguläres

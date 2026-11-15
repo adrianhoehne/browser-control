@@ -1,118 +1,121 @@
-# Mitmachen
+# Contributing
 
-Kurz: dieses Projekt wird spec-getrieben. Die Spec kommt vor dem Code, sie
-geht durch ein Review-Gate, und erst danach wird gebaut. Wer eine Änderung
-will, schreibt zuerst eine Spec in `docs/`.
+Short version: this project is spec-driven. The spec comes before the code, it
+passes a review gate, and only then is anything built. If you want a change,
+write a spec in `docs/` first.
 
-## Voraussetzungen
+## Prerequisites
 
-- **Node ≥ 22** (`package.json`, `engines.node`). Es gibt **keine**
-  Abhängigkeiten — kein `npm install` nötig.
-- Firefox zum Ausprobieren der Erweiterung (siehe `INSTALL.md`).
-- Für die Live-Messungen: ein eigener Browser, ein eigenes Token, ein eigener
-  Rechner. Nichts davon ist im Repo.
+- **Node ≥ 22** (`package.json`, `engines.node`). There are **no** dependencies —
+  no `npm install` needed.
+- Firefox to try the extension (see `INSTALL.md`).
+- For live measurements: your own browser, your own token, your own machine.
+  None of that is in the repo.
 
-## Tests und Prüfung
+## Tests and checks
 
 ```bash
-npm test; echo $?     # 0; Ausgabe enthält "^# fail 0" UND "^# cancelled 0"
-npm run check; echo $?  # 0 — node --check über jede .js/.mjs
+npm test; echo $?       # 0; the output contains "^# fail 0" AND "^# cancelled 0"
+npm run check; echo $?  # 0 — node --check over every .js/.mjs
 ```
 
-`npm test` läuft mit `--test-concurrency=1 --test-timeout=90000`: eine Datei,
-die hängt, scheitert nach 90 s, statt den Lauf offen zu halten. Die langsamste
-Datei ist `test/mcp.test.js`.
+`npm test` runs with `--test-concurrency=1 --test-timeout=90000`: a file that
+hangs fails after 90 s instead of holding the run open. The slowest file is
+`test/mcp.test.js`.
 
-**Ein Proof braucht einen Fallnamen.** `grep -c '^ok [0-9]* - '` ohne Namen ist
-vakuum-grün — Node zählt die Dateizeile `ok 1 - test/…` mit. Immer
-`grep -cE '^ok [0-9]+ - <name>'` schreiben, und die erwartete Zahl festnageln.
+**A proof needs a case name.** `grep -c '^ok [0-9]* - '` without a name is
+vacuously green — Node counts the file line `ok 1 - test/…` too. Always write
+`grep -cE '^ok [0-9]+ - <name>'`, and pin the expected number.
 
-## Der Ablauf: ein Inkrement
+## The loop: one increment
 
-1. **Spec.** `docs/NN-kurzbeschreibung.md` mit Frontmatter (`description`,
-   `status: proposed`) und den Pflichtabschnitten aus `docs/README.md`. Kein
-   Code vor der Spec. Ist eine Frage nicht beantwortbar, steht sie unter
-   `## Open questions` — geraten wird nicht.
-2. **Absprache.** Ziel und `## Acceptance criteria` dem Betreiber vorlegen und
-   auf dessen OK warten. Ohne diese Absprache wird kein Dev-Plan geschrieben.
-3. **Dev-Plan.** Ein Stufenplan (Bau-Reihenfolge, Dateien, Beweis je Stufe)
-   kommt von anderer Hand als der Spec und wird in sie eingefügt.
-4. **Spec-Review — Gate.** Ein Reviewer prüft die Spec gegen ihre Prüfliste.
-   Nur ein `✅ Ship it` öffnet das Gate; `🔧 Fix these` und `🤔 Needs a rethink`
-   blockieren. **Nach dem dritten Block ist die Spec zu groß** — dann wird sie
-   geteilt, nicht durchgewinkt.
-5. **Umsetzung.** Eine Stufe pro Auftrag. Der Umsetzer hält die Touch-Boundary
-   ein, fährt die Abnahmebefehle selbst und committet nie.
-6. **Code-Review — Gate.** Der Diff wird gegen die Spec geprüft. Ohne `✅ Ship
-   it` kein Commit; der Befund geht an **denselben** Umsetzer, mit derselben
-   Spec. Blockt es wiederholt, ist das Inkrement zu groß: Stufe teilen.
-7. **Abnahme und Commit.** Der Orchestrator liest den Diff, fährt die
-   Abnahmebefehle, prüft die Kriterien einzeln und committet erst dann. Er
-   pflegt dabei `docs/README.md` (Spalte `Status`) und `docs/PROJECT-STATE.md`.
-   Die letzte Stufe stellt die Spec auf `status: active` und beschreibt den
-   Ist-Zustand.
+1. **Spec.** `docs/NN-short-description.md` with frontmatter (`description`,
+   `status: proposed`) and the mandatory sections from `docs/README.md`. No code
+   before the spec. If a question cannot be answered, it goes to
+   `## Open questions` — nothing is guessed.
+2. **Agreement.** Present the goal and `## Acceptance criteria` to the operator
+   and wait for their OK. Without that agreement no dev plan is written.
+3. **Dev plan.** A staged plan (build order, files, proof per stage) comes from
+   someone other than the spec author and is inserted into the spec.
+4. **Spec review — gate.** A reviewer checks the spec against a checklist. Only a
+   `✅ Ship it` opens the gate; `🔧 Fix these` and `🤔 Needs a rethink` block it.
+   **After the third block the spec is too big** — split it, do not wave it
+   through.
+5. **Implementation.** One stage per assignment. The implementer respects the
+   touch boundary, runs the acceptance commands itself and never commits.
+6. **Code review — gate.** The diff is checked against the spec. Without
+   `✅ Ship it` there is no commit; the finding goes back to the **same**
+   implementer with the **same** spec. Repeated blocking means the increment is
+   too big: split the stage.
+7. **Acceptance and commit.** The orchestrator reads the diff, runs the
+   acceptance commands, checks each criterion and only then commits. They keep
+   `docs/README.md` (the `Status` column) and `docs/PROJECT-STATE.md` up to date.
+   The last stage sets the spec to `status: active` and describes the current
+   state.
 
-**Ein Bericht ist ein Bericht, kein Beweis:** nichts wird auf Prosa abgenommen.
+**A report is a report, not proof:** nothing is accepted on prose.
 
-## Rollen
+## Roles
 
-| Rolle | Darf | Darf nicht |
+| Role | May | May not |
 |---|---|---|
-| **Orchestrator** | Spec schreiben, zuschneiden, abnehmen, committen, Doku pflegen | Produktivcode schreiben |
-| **Umsetzer** | Code und Tests schreiben, die Abnahmebefehle fahren | die Spec ändern, committen, die eigene Arbeit reviewen |
-| **Reviewer** | Spec und Diff prüfen, Verdict geben | irgendetwas ändern |
+| **Orchestrator** | write and cut specs, accept, commit, maintain docs | write production code |
+| **Implementer** | write code and tests, run the acceptance commands | change the spec, commit, review their own work |
+| **Reviewer** | check spec and diff, give a verdict | change anything |
 
-Ein Schreiber pro Arbeitsbaum. Parallele Arbeit nur in getrennten Worktrees;
-Reviews dürfen sich überlappen.
+One writer per working tree. Parallel work only in separate worktrees; reviews
+may overlap.
 
-## Abnahme
+## Acceptance
 
-Diese Befehle laufen vor jedem Commit grün:
+These commands must be green before every commit:
 
 ```bash
-npm test; echo $?                    # 0, enthält "^# fail 0" und "^# cancelled 0"
+npm test; echo $?                    # 0, contains "^# fail 0" and "^# cancelled 0"
 npm run check; echo $?               # 0
-git grep --untracked -nE '[0-9a-f]{32,}' -- .   # keine Ausgabe, Exit 1
+git grep --untracked -nE '[0-9a-f]{32,}' -- .   # no output, exit 1
 ```
 
-Dazu die Kriterien der jeweiligen Spec. Wo ein Kriterium nur im echten Browser
-entscheidbar ist, steht das dort und wird vom Betreiber abgehakt.
+Plus the criteria of the spec at hand. Where a criterion can only be decided in
+a real browser, the spec says so and the operator ticks it off.
 
-Kein Commit ohne grüne Abnahme **und** ohne `✅` aus Schritt 6.
+No commit without green acceptance **and** a `✅` from step 6.
 
 ## Touch boundary
 
-- **Kein Patch an Fremdcode.** Anpassungen an fremdem Verhalten laufen über
-  eigene Wrapper davor — nie über `node_modules`, ein vendortes Paket oder eine
-  heruntergeladene Quelle.
-- **Keine Tokens, Secrets oder Zugangsdaten im Repo** — auch nicht in Tests,
-  Beispielen oder Logs. Ein Test, der eines braucht, liest es aus der Umgebung.
-- **Generierte Artefakte nie von Hand ändern.** Was ein Build erzeugt, wird
-  durch den Build erzeugt.
-- Dateien, die zu einem anderen Inkrement gehören, werden nicht angefasst.
+- **No patching foreign code.** Adjustments to third-party behaviour go through
+  your own wrapper in front of it — never through `node_modules`, a vendored
+  package or a downloaded source.
+- **No tokens, secrets or credentials in the repo** — not in tests, examples or
+  logs either. A test that needs one reads it from the environment.
+- **Never edit generated artefacts by hand.** What a build produces is produced
+  by the build.
+- Files that belong to another increment are left alone.
 
-## Sprache
+## Language
 
-- **Specs, Doku: Deutsch.**
-- **Abschnittsnamen bleiben englisch**, wo ein Prüfskript sie liest:
+- **Specs and internal docs: German.** That is the project's working language.
+- **Public files: English** — `README.md`, `INSTALL.md`, `CONTRIBUTING.md`,
+  `LICENSE`.
+- **Section names stay English** where a check script reads them:
   `## Testing`, `## Acceptance criteria`, `## Dev plan`, `## Open questions`,
   `## Additional dependencies`, `## Dependency changes`.
-- **Code: englisch** — Bezeichner, Kommentare, Dateinamen.
-- **Sichtbare Texte: deutsch** — was ein Mensch auf dem Bildschirm liest. Die
-  Ausnahme ist, was im Browser gegenüber einer Webseite erscheint.
+- **Code: English** — identifiers, comments, file names.
+- **Visible text: German** — what a human reads on screen in the extension's UI.
+  The exception is what appears towards a web page; that follows the page.
 
-## Regeln
+## Rules
 
-- **Keine Anforderung erfinden.** Unklare Punkte werden gefragt oder als
-  `## Open questions` notiert.
-- **Eine Spec, ein Inkrement.** Mehrere Änderungen sind mehrere Specs.
-- **Keine neuen Abhängigkeiten ohne Rücksprache.**
-- **Der Browser gehört dem Betreiber.** Der Agent arbeitet in seinem eigenen
-  Tab und gibt ihn frei, sobald der Betreiber eingreift; Anmeldung,
-  Zwei-Faktor und Passkeys macht der Betreiber selbst.
+- **Do not invent requirements.** Unclear points are asked about or noted under
+  `## Open questions`.
+- **One spec, one increment.** Several changes are several specs.
+- **No new dependencies without asking first.**
+- **The browser belongs to the operator.** The agent works in its own tab and
+  hands it back as soon as the operator steps in; logins, two-factor and passkeys
+  are the operator's job.
 
-## Verweise
+## References
 
-- Spec-Format und Registry: `docs/README.md`
-- Einrichtung (Token, Caddy, Dienst, Erweiterung): `INSTALL.md`
-- Stand des Projekts: `docs/PROJECT-STATE.md`
+- Spec format and registry: `docs/README.md`
+- Installation (token, bridge, extension): `INSTALL.md`
+- Project state: `docs/PROJECT-STATE.md`

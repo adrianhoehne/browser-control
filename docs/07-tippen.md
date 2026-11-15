@@ -15,11 +15,11 @@ Extension bekommt eine Option „Passwortfelder erlauben" (Default: aus). Anmeld
 in seinem Namen bleibt damit seine Entscheidung, nicht die Voreinstellung.
 
 **Das ändert eine geschriebene Projektregel, und zwar bewusst:** `CONTRIBUTING.md`,
-`## Regeln` sagt „Anmeldung, Zwei-Faktor und Passkeys macht der Betreiber selbst,
+`## Rules` sagt „Anmeldung, Zwei-Faktor und Passkeys macht der Betreiber selbst,
 der Agent wartet darauf", und `docs/PROJECT-STATE.md` führt das als Entscheidung
 der Anlage. Mit dieser Option kann der Agent — wenn der Betreiber sie einschaltet
 — ein Passwortfeld füllen. Die Regel gilt damit nur noch, solange die Option aus
-ist. Der Nachtrag in `CONTRIBUTING.md`, `## Regeln` und in `docs/PROJECT-STATE.md`
+ist. Der Nachtrag in `CONTRIBUTING.md`, `## Rules` und in `docs/PROJECT-STATE.md`
 (Datum, Grund, Betreiberentscheidung) ist Orchestrator-Arbeit und gehört zum
 Commit dieses Inkrements.
 
@@ -261,7 +261,7 @@ steht nie in einer Logzeile** (er kann ein Passwort sein), nur seine Länge; bei
    Qwant-Seite `example` in das Suchfeld und sendet ab; Beleg ist die Antwort mit
    einer `url` auf `?q=example` und Text > 0 mit Treffern.
 
-   **Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 6
+   **Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 6
    ist erst nach den Handgriffen messbar; Kriterien 1–5 laufen vor dem Commit.
    Fällt 6 rot aus, wird vorwärts korrigiert und die rote Zeile mit Datum unter
    `## Bekannte Lücken` eingetragen; ist die **Kernannahme** widerlegt (das
@@ -526,7 +526,7 @@ keine Stufe.
   erfundene Werte (`"geheim-testwert"`).
 - `extension/manifest.json` bleibt unverändert (keine neue Berechtigung),
   `bridge/websocket.mjs` und `bridge/config.mjs` ebenso.
-- `CONTRIBUTING.md` (`## Regeln`, Nachtrag zur Passwort-Option), `docs/PROJECT-STATE.md`,
+- `CONTRIBUTING.md` (`## Rules`, Nachtrag zur Passwort-Option), `docs/PROJECT-STATE.md`,
   `docs/README.md`, `docs/ROADMAP.md` und `INSTALL.md` pflegt der Orchestrator.
 - Kein Produktivcode für Inkrement 08 oder später (`focus`, Ruhe-Erkennung,
   Screenshot, Frames, `select`/Checkboxen).

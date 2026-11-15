@@ -214,7 +214,7 @@ nicht auf stderr.
    kennt nur die Grammatik, die der Selektor-Bauer erzeugt. Dass der Selektor im
    **echten** Browser wieder trifft, zeigt erst dieser Lauf.
 
-   **Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 6
+   **Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 6
    ist erst nach den Handgriffen messbar, und der Betreiber lädt die Erweiterung
    aus seinem eigenen Klon — also nach dem `git pull`. Kriterien 1–5 laufen vor
    dem Commit, Kriterium 6 danach; fällt es rot aus, wird vorwärts korrigiert und

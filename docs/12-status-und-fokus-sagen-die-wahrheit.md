@@ -154,7 +154,7 @@ Keine Änderung. Die Logzeilen von `status` (`status windows=…`) und `focus`
    sein Agenten-Tab ist; `browser_focus` meldet beim **ersten** Aufruf
    `focused: true`, nachdem der Betreiber in ein anderes Fenster gewechselt hat.
 
-**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 5 ist
+**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 5 ist
 erst nach den Handgriffen messbar (Extension neu laden, pi neu starten), und der
 Betreiber lädt die Erweiterung aus seinem eigenen Klon — also nach dem `git pull`.
 Kriterien 1–4 laufen vor dem Commit, Kriterium 5 danach; fällt es rot aus, wird

@@ -261,7 +261,7 @@ Länge der erzeugten Data-URL), sonst ist die Leiter nicht prüfbar.
 Jedes Kriterium trägt `(lokal)` oder `(live)`; live heißt: echter Browser des
 Betreibers, Reload der Erweiterung und pi-Neustart — das hakt der Betreiber ab.
 
-**Ausnahme mit Datum** (2026-10-27, `CONTRIBUTING.md`, `## Abnahme`): die Live-Kriterien
+**Ausnahme mit Datum** (2026-10-27, `CONTRIBUTING.md`, `## Acceptance`): die Live-Kriterien
 9, 10 und 11 sind erst nach dem `git pull` im eigenen Klon des Betreibers messbar,
 also nach dem Commit. Dann gilt: die lokal entscheidbaren Kriterien laufen vor
 dem Commit, die Messung danach; fällt ein Messkriterium rot aus, wird vorwärts
@@ -577,7 +577,7 @@ Harness-Arbeit in `test/extension.test.js`.
 
 7. **Abnahme und Übergabe** — keine Produktcodeänderung mehr. `npm test`,
    `npm run check`, der Secret-Grep und `git diff --exit-code
-   extension/manifest.json` aus `CONTRIBUTING.md`, `## Abnahme`; dazu ein Blick auf
+   extension/manifest.json` aus `CONTRIBUTING.md`, `## Acceptance`; dazu ein Blick auf
    `git diff --stat`, dass die Touch-Boundary hält (`extension/manifest.json`,
    `bridge/{websocket,config,bridge,http-transport}.mjs`, `INSTALL.md`,
    `CONTRIBUTING.md` und alle `docs/` unberührt).

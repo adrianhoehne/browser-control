@@ -168,7 +168,7 @@ Inkrement **keine** neue Logzeile mit Adresse. Die Logzeile
 5. Die MCP-Sätze aus `## MCP-Werkzeug` sind im `test/mcp.test.js` gepinnt, der
    heutige Satz ohne Details bleibt wörtlich.
 
-**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Der **Live-Beleg**
+**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Der **Live-Beleg**
 (Extension in `about:debugging` neu laden, pi neu starten, `browser_read` auf einer
 PDF-Adresse) ist erst nach den Handgriffen möglich, und der Betreiber lädt die
 Erweiterung aus seinem eigenen Klon — also nach dem `git pull`. Kriterien 1–5

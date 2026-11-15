@@ -181,7 +181,7 @@ zweiten Reload und damit eine neue Zehn-Minuten-Messung kostet.
    manifest_version, m.background.persistent, m.permissions.join(','))"` →
    damals `2 true tabs,storage`, seit Spec 05 mit `<all_urls>`). **Completed 2026-10-23**
 3. **Lokaler Gesamtlauf und Übergabe — kein Produktcode** — der Umsetzer fährt
-   die Abnahmebefehle aus `CONTRIBUTING.md`, `## Abnahme`: `npm test; echo $?` → `0`
+   die Abnahmebefehle aus `CONTRIBUTING.md`, `## Acceptance`: `npm test; echo $?` → `0`
    **und** `node --test --test-reporter=tap test/*.test.js 2>&1 | grep -q '^#
    fail 0'` → Exit 0, `npm run check; echo $?` → `0`,
    `git grep --untracked -nE '[0-9a-f]{32,}' -- .` → keine Ausgabe, Exit 1. Er
@@ -198,7 +198,7 @@ Zehn-Minuten-Messung nicht vor dem Commit laufen: ohne `git pull` sieht sein
 Firefox das neue Manifest nicht, und ohne Reload gibt es keine Verbindung.
 
 Das ist eine **benannte Abweichung** von „kein Commit ohne grüne Abnahme"
-(`CONTRIBUTING.md`, Schritt 7 **und** `## Abnahme`, wo dieselbe Regel steht): der
+(`CONTRIBUTING.md`, Schritt 7 **und** `## Acceptance`, wo dieselbe Regel steht): der
 Commit enthält die Umsetzung und den Doku-Nachzug, die Kriterien 3–6 laufen
 direkt danach. Die Abweichung gilt nur für dieses Inkrement und trennt die
 Kriterien in zwei Gruppen:
@@ -216,7 +216,7 @@ Gewinkt wird nichts. Die Abschlusshandlungen (Spec 02 auf `active`,
 Gate**, keine Verhaltensänderung; sie lösen keine neue Review-Runde aus
 (`CONTRIBUTING.md`, „eine geänderte Spec geht erneut durch Schritt 4" gilt für
 inhaltliche Änderungen). Damit die Regel nicht zweimal verschieden ausgelegt
-wird, trage ich die Abweichung mit Datum und Grund in `CONTRIBUTING.md`, `## Abnahme`
+wird, trage ich die Abweichung mit Datum und Grund in `CONTRIBUTING.md`, `## Acceptance`
 nach.
 
 Reihenfolge nach Stufe 3, alles Orchestrator-Arbeit:
@@ -413,9 +413,9 @@ Runde 2 des Spec-Reviews — je Befund eine Zeile:
 - **B2** (zwei Verfahren für denselben Rot-Fall) — **übernommen**: Kriterium 3
   rot → zurück in die Spec, Kriterien 4–6 rot → vorwärts korrigieren.
 - **B3** (die Abweichung war nur gegen Schritt 7 benannt, nicht gegen
-  `## Abnahme`; der Abschluss nach dem Gate war nicht eingeordnet) —
+  `## Acceptance`; der Abschluss nach dem Gate war nicht eingeordnet) —
   **übernommen**: beide Stellen genannt, Abschluss als Buchführung eingeordnet,
-  Nachzug in `CONTRIBUTING.md`, `## Abnahme` zugesagt.
+  Nachzug in `CONTRIBUTING.md`, `## Acceptance` zugesagt.
 - **N1** (mehrere `received SIGTERM`-Zeilen im Log) — **übernommen**: gemessen
   wird ab der letzten.
 - **N2** (Neustartbefehl ohne `BC_LOG=debug`, Kriterium 5 braucht den
@@ -433,7 +433,7 @@ dritte, deshalb gilt `CONTRIBUTING.md`, Schritt 4 (siehe unten):
   118 Zeilen im lebenden Log beginnen anders) — **übernommen**: Begründung
   ersetzt, dazu der Hinweis, dass `grep -c` bei `0` mit Exit 1 endet und die
   Zahl zählt, nicht der Exit-Code.
-- **B3** (`CONTRIBUTING.md`, `## Abnahme` sagte „wird vorwärts korrigiert", die Spec
+- **B3** (`CONTRIBUTING.md`, `## Acceptance` sagte „wird vorwärts korrigiert", die Spec
   sagt für Kriterium 3 „zurück in die Spec") — **übernommen**: `CONTRIBUTING.md` hat
   den Halbsatz jetzt, die Kernannahme geht zurück in die Spec.
 - **B2** und **N1–N5** aus Runde 2 — im Prüflauf von Runde 3 bestätigt.

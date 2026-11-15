@@ -156,7 +156,7 @@ und damit im Debug-Block.
    trotzdem ≥ 3 000 Zeichen: dann trägt die Mechanik, die Seite war nur nie ruhig,
    und das gehört nach `## Bekannte Lücken`.
 
-**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterien 5 und 6
+**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterien 5 und 6
 sind erst nach den Handgriffen messbar und nach dem `git pull` aus dem
 Betreiber-Klon. Kriterien 1–4 laufen vor dem Commit.
 

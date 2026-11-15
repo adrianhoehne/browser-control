@@ -167,7 +167,7 @@ sich den Slot je Tab vor); der Hub ist deshalb unverändert.
 **Kriterien 2–5 sind Testfälle**, keine Live-Messungen (die Stufen nennen sie
 namentlich); nur Kriterium 6 braucht den echten Browser.
 
-**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 6 ist erst
+**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 6 ist erst
 nach Reload und Neustart messbar. Kriterien 1–5 laufen vor dem Commit; rot bei 6
 heißt vorwärts korrigieren, und die rote Zeile steht unter `## Bekannte Lücken`. Ist
 die **Kernannahme** widerlegt (Tabs lassen sich nicht unabhängig adressieren), geht

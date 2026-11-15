@@ -673,7 +673,7 @@ unberührt.
 **Ausnahme mit Datum (2026-11-12).** Kriterium 12 und 13 sind nur im echten
 Profil des Betreibers messbar (Extension-Reload, ein Aufruf in einer
 pi-Sitzung). Sie werden **nach** dem Commit gemessen — die Ausnahme aus
-`CONTRIBUTING.md`, `## Abnahme` (2026-10-23). Die Kriterien 1–11 laufen **vor** dem
+`CONTRIBUTING.md`, `## Acceptance` (2026-10-23). Die Kriterien 1–11 laufen **vor** dem
 Commit. Fällt Kriterium 12 rot aus, ist der Weg als Ganzes nicht belegt: dann
 geht die Spec zurück in `## Open questions` und `## Non-goals`, nicht in die
 Lückenliste.
@@ -754,7 +754,7 @@ und ein Sprung holt die Datei. Belege: M16 und M17.
 
 **Widerlegt (2) beides**, ist der Einstieg ins Menü nicht sprachunabhängig —
 dann ist die Kernannahme von M5 als *Bedienung* nicht umsetzbar, und das
-Inkrement geht zurück **in die Spec** — `CONTRIBUTING.md`, `## Abnahme`:
+Inkrement geht zurück **in die Spec** — `CONTRIBUTING.md`, `## Acceptance`:
 `## Bekannte Lücken` ist dafür kein Ersatz.
 
 ---
@@ -1008,7 +1008,7 @@ Namen aus Teil 1), `## Log` um die Stufe-0-Befunde, `## Open questions` prüfen,
 Prosa beschreibend, `status: active`, `## Amendments` **entfernen**,
 `docs/README.md`/`PROJECT-STATE.md`/`ROADMAP.md` pflegen,
 committen. Danach die Live-Kriterien 12 und 13 (Ausnahme mit Datum,
-`CONTRIBUTING.md` `## Abnahme`): ein englisches und ein japanisches Video, erste drei
+`CONTRIBUTING.md` `## Acceptance`): ein englisches und ein japanisches Video, erste drei
 Segmente wörtlich, beide Sprachfelder wörtlich.
 
 Proof: `grep -n '^status:' docs/33-spurwahl.md` ⇒ `status: active`;
@@ -1122,7 +1122,7 @@ Baum benutzen. Stufe 5 beschreibt den Ist-Zustand und geht deshalb zuletzt.
   wiederverwendbar für jedes Werkzeug, das mit dem Player statt mit dem DOM
   redet, samt array-artiger Seitenobjekte für die Xray-Regel.
 - **Offen und nicht angefasst:** die Aufteilung von `test/mcp.test.js` nach
-  Werkzeugfamilien (`CONTRIBUTING.md`, `## Abnahme`, 90-s-Frist) und die fünf
+  Werkzeugfamilien (`CONTRIBUTING.md`, `## Acceptance`, 90-s-Frist) und die fünf
   Werkzeugzahl-Pins, die unverändert bleiben.
 
 ## Risiken

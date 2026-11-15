@@ -265,7 +265,7 @@ und `navigate`, wo der Debug-Block das Ergebnis zeigt.
    verbietet `## Touch boundary`. Belegt werden Feldnamen, `tabId`, `truncated`
    und die Zeichenzahl.
 
-   **Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 6
+   **Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 6
    ist erst nach den Handgriffen messbar. Kriterien 1–5 laufen vor dem Commit,
    Kriterium 6 danach; fällt es rot aus, wird vorwärts korrigiert und die rote
    Zeile steht mit Datum unter `## Bekannte Lücken`. Ist die **Kernannahme**
@@ -409,7 +409,7 @@ und `navigate`, wo der Debug-Block das Ergebnis zeigt.
    `npm run check; echo $?`, `git grep --untracked -nE '[0-9a-f]{32,}' -- .`,
    dann die Spec auf `active`. Kriterium 6 sind Handgriffe des Betreibers
    (Extension in `about:debugging` neu laden, pi neu starten) und laufen nach dem
-   Commit gemäß der Ausnahme in `CONTRIBUTING.md`, `## Abnahme`;
+   Commit gemäß der Ausnahme in `CONTRIBUTING.md`, `## Acceptance`;
    `~/.pi/agent/mcp.json` und `INSTALL.md` fasst der Umsetzer nicht an.
 
 ### What could go wrong
@@ -559,7 +559,7 @@ Stand 2026-10-23, vor der Umsetzung:
 - **Die `url` in der Logzeile trägt ihre Query** — geerbt von `navigate`; wer
   Tokens in URLs hat, findet sie im `bridge.log`.
 - **Kriterium 6 ist erst nach dem Commit messbar** (Extension-Reload,
-  pi-Neustart); die Ausnahme steht dort und in `CONTRIBUTING.md`, `## Abnahme`.
+  pi-Neustart); die Ausnahme steht dort und in `CONTRIBUTING.md`, `## Acceptance`.
 - **Der Debug-Block redigiert per Sperrliste** (2026-10-23, Code-Review): die
   Kopie ersetzt nur `text`; ein künftiges Feld im `read`-Ergebnis (etwa `html`
   oder `selection`) landete bei `BC_LOG=debug` ungefiltert auf stderr. Eine

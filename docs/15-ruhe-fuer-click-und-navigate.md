@@ -142,7 +142,7 @@ Debug-Block.
    dem Klick noch nachlädt — `settled: true` und `waitedMs > 0`, und die Antwort
    enthält Text, der vor dem Warten nicht da war.
 
-**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 7 ist erst
+**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 7 ist erst
 nach den Handgriffen messbar und nach dem `git pull` aus dem Betreiber-Klon.
 Kriterien 1–6 laufen vor dem Commit; fällt 7 rot aus, wird vorwärts korrigiert und
 die rote Zeile steht unter `## Bekannte Lücken`.

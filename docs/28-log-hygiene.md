@@ -66,7 +66,7 @@ Redaktionshelfer (`redactedPageString`, `inspectDebugResult`,
 
 ## Acceptance criteria
 
-**Ausnahme mit Datum** (2026-10-29, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 5 ist live
+**Ausnahme mit Datum** (2026-10-29, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 5 ist live
 und nach dem Commit zu messen; **Kernannahme** ist Kriterium 2.
 
 1. **Ein Ort** (lokal). Die sieben `#report…`-Zweige enthalten keine eigene

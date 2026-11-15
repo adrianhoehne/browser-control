@@ -98,7 +98,7 @@ es dort raus, ohne dass ein Schema es merkt.
 
 ## Acceptance criteria
 
-**Ausnahme mit Datum** (2026-10-27, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 4 ist
+**Ausnahme mit Datum** (2026-10-27, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 4 ist
 live und nach dem Commit zu messen; **Kernannahme** ist Kriterium 4.
 
 1. **Ohne `frame` unverändert** (lokal). `inspect` und `eval` injizieren weiter in

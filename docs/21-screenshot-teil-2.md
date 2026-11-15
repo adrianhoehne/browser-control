@@ -146,7 +146,7 @@ Teil 1, die einen Textblock mit Base64 erwarten, werden umgeschrieben.
 
 ## Acceptance criteria
 
-**Ausnahme mit Datum** (2026-10-27, `CONTRIBUTING.md`, `## Abnahme`): die Live-Kriterien
+**Ausnahme mit Datum** (2026-10-27, `CONTRIBUTING.md`, `## Acceptance`): die Live-Kriterien
 9 und 10 sind erst nach dem `git pull` im eigenen Klon und dem Reload der
 Erweiterung messbar, also nach dem Commit; fällt eines rot aus, wird vorwärts
 korrigiert und die rote Zeile steht unter `## Bekannte Lücken`. **Kernannahme** ist

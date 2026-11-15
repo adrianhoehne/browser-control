@@ -335,7 +335,7 @@ weiter.
 
 **Ausnahme mit Datum (2026-11-12).** Kriterium 9 ist nur im echten Profil des
 Betreibers messbar (Extension-Reload, dann ein Aufruf in einer pi-Sitzung). Es
-wird **nach** dem Commit gemessen — die Ausnahme aus `CONTRIBUTING.md`, `## Abnahme`
+wird **nach** dem Commit gemessen — die Ausnahme aus `CONTRIBUTING.md`, `## Acceptance`
 (2026-10-23). Die Kriterien 1–8, 10 und 11 laufen **vor** dem Commit. Fällt
 Kriterium 9 rot aus, wird **vorwärts** korrigiert und die rote Zeile steht in
 `## Bekannte Lücken`.

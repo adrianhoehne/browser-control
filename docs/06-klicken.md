@@ -186,7 +186,7 @@ Fehlerzeilen; wer wissen will, was nicht passte, liest die Werkzeug-Antwort.
    Startseite — die Messung antwortete korrekt `no_match`, und das Kriterium
    wurde nach der Messung korrigiert.
 
-   **Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 6
+   **Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 6
    ist erst nach den Handgriffen messbar; Kriterien 1–5 laufen vor dem Commit.
    Fällt 6 rot aus, wird vorwärts korrigiert und die rote Zeile mit Datum unter
    `## Bekannte Lücken` eingetragen; ist die **Kernannahme** widerlegt (der Klick

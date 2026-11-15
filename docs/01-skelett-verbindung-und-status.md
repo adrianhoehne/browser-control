@@ -524,7 +524,7 @@ geprüft), `~/.config/browser-control/token` (`openssl rand -hex 32`,
 
 Nicht Stufenarbeit: `status: active` und die Prosa der Spec
 (`docs/README.md`, „Änderungen an bestehenden Specs") sowie der Eintrag der
-Abnahmebefehle in `CONTRIBUTING.md ## Abnahme` — der kommt in Schritt 7, also vor dem
+Abnahmebefehle in `CONTRIBUTING.md`, `## Acceptance` — der kommt in Schritt 7, also vor dem
 ersten Commit, wörtlich `npm test` und `npm run check` aus Kriterium 1. Der
 Umsetzer fasst beides nicht an.
 

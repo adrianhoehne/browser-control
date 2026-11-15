@@ -145,7 +145,7 @@ enthält keine Seiteninhalte.
    mit `active:true`/`focused:true` und der Betreiber bestätigt, dass der
    Agenten-Tab vorn steht.
 
-   **Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 6
+   **Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 6
    ist erst nach den Handgriffen messbar, und der Betreiber lädt die Erweiterung
    aus seinem eigenen Klon — also nach dem `git pull`. Kriterien 1–5 laufen vor
    dem Commit, Kriterium 6 danach; fällt es rot aus, wird vorwärts korrigiert und
@@ -347,7 +347,7 @@ Stand 2026-10-23, vor der Umsetzung:
 
 - **Kriterium 6 ist erst nach dem Commit messbar** (Extension-Reload,
   pi-Neustart, Fensterwechsel); die begründete Ausnahme steht dort und in
-  `CONTRIBUTING.md`, `## Abnahme`.
+  `CONTRIBUTING.md`, `## Acceptance`.
 - **Kein „zurück zum vorher aktiven Tab".** Wer den Fokus holt, gibt ihn nicht
   wieder ab — das steht unter `## Risiken` und braucht ein eigenes Inkrement,
   wenn es stört.

@@ -1,16 +1,31 @@
 # Installation
 
-Zwei Seiten, in dieser Reihenfolge: **der Server** (Token, Caddy, Bridge) und der
-**Rechner mit Firefox** (Extension). Wer nur einen Teil macht, sieht entweder
-`502` (Bridge fehlt) oder gar nichts (Extension fehlt).
+There are two halves, and they are done in this order:
 
-Bezug: `docs/01-skelett-verbindung-und-status.md` — dort stehen `## Configuration`
-(Defaults, Variablen) und die Abnahmekriterien; hier steht, was zu tippen ist.
+1. **The server** — a token file and the bridge (sections 2 and 3).
+2. **The browser machine** — the Firefox extension (section 4).
 
-## 1. Token-Datei anlegen (auf dem Server)
+If you only do one half you get either `502` (bridge missing) or nothing at all
+(extension missing). Server and browser can be the same machine; in that case
+you can skip the optional Caddy section entirely.
 
-Die Bridge startet nicht ohne Token: fehlt die Datei oder ist sie zu kurz, endet
-sie mit Exit-Code 2 und der Zeile `token file missing or too short: <pfad>`.
+Reference: `docs/01-skelett-verbindung-und-status.md` holds the configuration
+defaults and the acceptance criteria. This file says what to type.
+
+## 1. Prerequisites
+
+| Where | What |
+|---|---|
+| Server | **Node ≥ 22** (`node -v`). There are **no** dependencies — `npm install` is not needed |
+| Server | Linux with a systemd **user** session (recommended, not required) |
+| Browser | **Firefox** with the profile you want the agent to use |
+| Both | The extension is **unsigned**; it is loaded as a *temporary* add-on |
+
+## 2. Server: the token
+
+The bridge does not start without a token. If the file is missing or too short
+it exits with code `2` and the line
+`token file missing or too short: <path>`.
 
 ```bash
 install -d -m 700 ~/.config/browser-control
@@ -18,90 +33,54 @@ openssl rand -hex 32 > ~/.config/browser-control/token
 chmod 600 ~/.config/browser-control/token
 ```
 
-Kontrolle:
+Check it:
 
 ```bash
 ls -l ~/.config/browser-control/token   # -rw------- (600)
-wc -c < ~/.config/browser-control/token # 65 = 64 Hex-Zeichen + Zeilenumbruch
+wc -c < ~/.config/browser-control/token # 65 = 64 hex characters + newline
 ```
 
-Der Zeilenumbruch ist in Ordnung: die Bridge trimmt den Inhalt, bevor sie ihn
-vergleicht. Der Pfad ist der Default von `BC_TOKEN_FILE`; wer ihn ändert
-(`BC_TOKEN_FILE=…`), muss denselben Pfad beim Start der Bridge setzen.
+The trailing newline is fine: the bridge trims the content before comparing.
+That path is the default of `BC_TOKEN_FILE`; if you change it, start the bridge
+with the same value.
 
-Derselbe Wert kommt später in die Optionsseite der Extension (Schritt 4) —
-nicht in eine URL und nicht ins Repo. Prüfung:
+The same value goes into the extension's options page later (section 4) — never
+into a URL, never into the repo. Check:
 
 ```bash
-git grep --untracked -nE '[0-9a-f]{32,}' -- .   # keine Ausgabe, Exit 1
+git grep --untracked -nE '[0-9a-f]{32,}' -- .   # no output, exit 1
 ```
 
-### Token wechseln
+### Rotating the token
 
-Ein Wechsel ist Handarbeit und braucht **keinen** Code — das ist bewusst so: es gibt
-genau einen Betreiber und einen Dienst, und ein Wechsel ist selten (Verdacht auf
-Abfluss, neuer Rechner). In dieser Reihenfolge, mit kurzer Unterbrechung:
+Rotating is manual work and needs **no** code change — deliberately: there is
+one operator and one service, and a rotation is rare (suspected leak, new
+machine). In this order, with a short interruption:
 
 ```bash
-# 1. Neues Token schreiben (die alte Datei wird ersetzt)
+# 1. write a new token (this replaces the old file)
 openssl rand -hex 32 > ~/.config/browser-control/token
 chmod 600 ~/.config/browser-control/token
 
-# 2. Dienst neu starten — er liest das Token nur beim Start
+# 2. restart the service — it reads the token only at startup
 systemctl --user restart browser-control
 
-# 3. Neuen Wert in die Optionsseite der Extension eintragen und speichern
-#    (about:addons → browser-control → Einstellungen)
+# 3. enter the new value in the extension's options page and save
+#    (about:addons → browser control → Preferences)
 ```
 
-Zwischen Schritt 2 und 3 ist die Erweiterung **abgemeldet** — sie versucht es mit
-Backoff weiter und verbindet sich, sobald das neue Token in ihren Optionen steht.
-Wer die Reihenfolge umdreht (erst Extension, dann Dienst), hat dasselbe Fenster,
-nur in der anderen Richtung; beides ist unkritisch, weil nichts verloren geht.
+Between steps 2 and 3 the extension is **logged out**; it retries with backoff
+and connects as soon as the new token is in its options. Doing it the other way
+round has the same window in the other direction, and both are harmless: nothing
+is lost.
 
-**Merke:** Ein Tokenwechsel braucht **zwei** Stellen — die Datei (für Bridge und
-`/mcp`) und die Extension-Optionen. Wer nur eine ändert, sieht `auth failed` im
-Journal der Bridge.
+**Remember:** a rotation touches **two** places — the file (for the bridge and
+`/mcp`) and the extension's options. Change only one and you will see
+`auth failed` in the bridge log.
 
-## 2. Caddy: der WS-Pfad vor der Basic-Auth (auf dem Server)
+## 3. Server: the bridge
 
-Die Extension spricht `wss://example.com/browser-control/ws`; Caddy
-beendet TLS und leitet an die Bridge auf `127.0.0.1:8110` weiter. Der Site-Block
-bedient heute Basic-Auth, und ein Browser-`WebSocket` kann keinen
-`Authorization`-Header setzen — der Pfad muss also aus der Auth heraus.
-
-Wichtig ist die Form: **ein `handle` allein genügt nicht.** In Caddys
-Direktivenreihenfolge läuft `basic_auth` vor `handle`, eine Site-weite Auth also
-auch vor dem WS-Zweig; zwei `handle`-Blöcke darunter ändern daran nichts. Die
-Auth muss **in den zweiten `handle` wandern**, dann schließen sich die Zweige
-aus (gleiche Gruppe, erster Treffer gewinnt) und der WS-Zweig liegt vorn:
-
-```
-example.com {
-    # Die Extension authentifiziert sich mit dem Token im hello-Frame.
-    handle /browser-control/ws {
-        reverse_proxy 127.0.0.1:8110
-    }
-
-    handle {
-        # … bestehende Konfiguration, inklusive basic_auth …
-    }
-}
-```
-
-Der Upstream muss **`127.0.0.1`** heißen, nicht `localhost`: Caddy löst
-`localhost` im Zweifel nach `[::1]` auf, die Bridge lauscht per Default nur auf
-`127.0.0.1`, und die Folge ist ein `502` bei laufender Bridge (im Caddy-Log:
-`dial tcp [::1]:8110: connect: connection refused`).
-
-Prüfen und laden:
-
-```bash
-caddy validate --config /etc/caddy/Caddyfile   # Exit 0
-systemctl reload caddy
-```
-
-## 3. Bridge starten (auf dem Server)
+### Try it by hand first
 
 ```bash
 cd ~/browser-control
@@ -109,88 +88,35 @@ mkdir -p ~/.local/state/browser-control
 nohup node bridge/bridge.mjs >> ~/.local/state/browser-control/bridge.log 2>&1 < /dev/null &
 ```
 
-Das `< /dev/null` ist wichtig, nicht Zierde: endet stdin, beendet sich die
-Bridge (so verschwindet sie, wenn pi sie als MCP-Server startet). Ohne die
-Umleitung bekommt sie beim Start über `ssh host 'nohup … &'` eine Pipe statt
-`/dev/null` und stirbt beim ersten EOF.
+The `< /dev/null` matters, it is not decoration: when stdin ends the bridge
+shuts down (that is how it disappears when an MCP client spawns it). Without the
+redirect, starting it through `ssh host 'nohup … &'` hands it a pipe instead of
+`/dev/null`, and it dies on the first EOF.
 
-Kontrolle:
+Check:
 
 ```bash
-ss -ltn | grep 8110          # LISTEN … 127.0.0.1:8110
+ss -ltn | grep 8110                # LISTEN … 127.0.0.1:8110
 tail -1 ~/.local/state/browser-control/bridge.log
 # 2026-…Z listening on 127.0.0.1:8110 log=info
 ```
 
-Für die Handprüfung mit Tab-Liste: `BC_LOG=debug nohup node bridge/bridge.mjs …`
-starten, dann steht das Ergebnis als eingerücktes JSON im Log.
+For a manual check that includes the tab list, start it with
+`BC_LOG=debug nohup node bridge/bridge.mjs …`; the answer then appears as
+indented JSON in the log.
 
-Beenden: `kill <pid>`, oder alle Instanzen
-`for p in $(ps -eo pid,args | awk '/node bridge\/bridge\.mjs/ && !/awk/ {print $1}'); do kill "$p"; done`.
-
-**Nicht dauerhaft**: der Prozess überlebt das Schließen des Terminals, aber
-keinen Reboot und keinen Absturz. Einen systemd-Dienst gibt es noch nicht (siehe
-„Nicht abgedeckt").
-
-## 4. Extension im Firefox (Rechner mit Browser)
-
-Die Extension ist **unsigniert**; sie wird darum als *temporäre* Erweiterung
-geladen. Ein XPI zum Herunterladen gibt es nicht — Quelle ist das Repo:
+Stop it with `kill <pid>`, or all instances:
 
 ```bash
-# von GitHub (der veröffentlichte Stand)
-git clone https://github.com/<besitzer>/browser-control.git ~/browser-control
-
-# oder per SSH von deinem eigenen Rechner, wenn du dort entwickelst
-git clone <user>@<host>:browser-control ~/browser-control
+for p in $(ps -eo pid,args | awk '/node bridge\/bridge\.mjs/ && !/awk/ {print $1}'); do kill "$p"; done
 ```
 
-Ohne git, nur die Extension:
+### Run it as a systemd user service (recommended)
 
-```bash
-mkdir -p ~/browser-control-extension
-rsync -av --delete <user>@<host>:browser-control/extension/ ~/browser-control-extension/
-```
-
-Dann in Firefox:
-
-1. `about:debugging#/runtime/this-firefox` öffnen.
-2. „Temporäre Erweiterung laden…".
-3. **`extension/manifest.json` auswählen** (im Klon:
-   `~/browser-control/extension/manifest.json`) — nicht den Ordner, nicht die
-   einzelnen Dateien.
-4. Rechtsklick auf das Symbol → „Add-on-Einstellungen" (oder `about:addons` →
-   Browser Control → Einstellungen).
-5. Endpunkt eintragen: `wss://example.com/browser-control/ws`
-6. Token eintragen: Inhalt von `~/.config/browser-control/token` auf dem Server.
-7. „Speichern", dann die Erweiterung in `about:debugging` **einmal neu laden** —
-   gespeicherte Optionen wirken erst beim nächsten Verbindungsaufbau.
-
-Seit Spec 34 steht **`webRequest`** im Manifest: nach dem Reload zeigt
-`about:addons` unter Berechtigungen zusätzlich das Beobachten von
-Netzwerkanfragen. Sie ist nötig, damit `browser_transcript` die signierte
-Adresse der Untertitelspur mitschneiden kann — ohne sie gäbe es für das Werkzeug
-nichts zu lesen.
-
-Die Erweiterungs-ID ist fest (`browser-control@bergkaese.dev`), Endpunkt und
-Token bleiben deshalb in `storage.local` über Reloads hinweg. **Nach einem
-Firefox-Neustart** ist die Erweiterung weg und muss neu geladen werden — die
-Einstellungen bleiben erhalten.
-
-Aktualisieren, wenn sich im Repo etwas ändert:
-
-```bash
-cd ~/browser-control && git pull
-```
-
-… dann „Reload" im `about:debugging`.
-
-## 5. Die Bridge als Dienst (empfohlen)
-
-Seit Spec 18 läuft die Bridge **einmal als systemd-User-Unit** und bietet MCP über
-HTTP an. Damit teilen sich alle Clients (pi und jeder andere MCP-Client) **einen**
-Dienst: kein Portkonflikt mehr, keine verwaiste Bridge nach einem Neustart, und die
-Werkzeuge sind sofort da.
+Since spec 18 the bridge runs **once** as a systemd user unit and serves MCP over
+HTTP. Every client (pi and any other MCP client) shares that **one** service: no
+port collisions, no orphaned bridge after a restart, and the tools are available
+immediately.
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -198,46 +124,36 @@ cp ~/browser-control/deploy/browser-control.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now browser-control
 systemctl --user status browser-control     # active (running)
-journalctl --user -u browser-control -f     # Log, inklusive Logrotation
+journalctl --user -u browser-control -f     # log, including rotation
 ```
 
-Der Dienst bindet **fest** `127.0.0.1:8110` (Erweiterung) und `127.0.0.1:8111`
-(MCP). Er sucht **keinen** freien Port: ist einer belegt, endet er mit `1` und einer
-Zeile, die den Besitzer nennt (`port 127.0.0.1:8111 in use, owner pid=… name=…`).
+The service binds **fixed** addresses: `127.0.0.1:8110` (extension) and
+`127.0.0.1:8111` (MCP). It does **not** look for a free port: if one is taken it
+exits with `1` and a line naming the owner
+(`port 127.0.0.1:8111 in use, owner pid=… name=…`).
 
-Die Bindungen und Pfade lassen sich über die Umgebung der Unit ändern
-(`systemctl --user edit browser-control` → `[Service] Environment=…`):
+**Session and reboot — what happens without extra work:** the unit runs in
+**your** systemd (`systemctl --user`), which ends with your last session. As long
+as a terminal, tmux or SSH window is open, the service keeps running. After a
+reboot it starts **with your login**, not before — and that is when Firefox
+starts too, so the order is right.
 
-| Variable | Voreinstellung | Wirkung |
-|---|---|---|
-| `BC_BIND` | `127.0.0.1:8110` | Adresse der Erweiterungs-Verbindung (`[::1]:8110` für IPv6) |
-| `BC_HTTP_PORT` | `8111` | Port für `POST /mcp` |
-| `BC_TOKEN_FILE` | `~/.config/browser-control/token` | wo das Token liegt |
-| `BC_LOG` | `info` | `debug` schreibt das JSON jeder Anfrage ins Journal |
-| `BC_CALL_TIMEOUT_MS`, `BC_HELLO_TIMEOUT_MS` | Protokollwerte | Fristen; nur zum Debuggen ändern |
-
-**Sitzung und Reboot — was ohne weiteres Zutun gilt:** die Unit läuft in **deinem**
-systemd (`systemctl --user`), und das endet mit deiner letzten Sitzung. Solange ein
-Terminal, tmux- oder SSH-Fenster offen ist, läuft der Dienst also. Nach einem Reboot
-startet er **mit deinem Login**, nicht davor — und genau dann startet auch Firefox,
-also ist die Reihenfolge in Ordnung.
-
-**Nur wenn du ihn ohne Login laufen lassen willst** (etwa um nach einem Reboot aus
-der Ferne über die Erweiterung zu arbeiten), brauchst du einmalig:
+**Only if you want it to run without a login** (for example to work remotely
+through the extension after a reboot) do this once:
 
 ```bash
 loginctl enable-linger "$USER"
 ```
 
-Das lässt den Benutzer-systemd beim Booten starten und nach dem Logout weiterlaufen —
-mit dem Preis, dass der Dienst dann **immer** läuft, auch wenn niemand da ist. Wer
-ohnehin ständig eingeloggt ist, braucht es nicht; die Entscheidung vom 2026-10-23 war:
-**nicht setzen.**
+That makes the user systemd start at boot and keep running after logout — at the
+price of the service running **always**, even when nobody is there. If you are
+logged in most of the time you do not need it; the decision on 2026-10-23 was:
+**do not set it**.
 
-**Wenn der Dienst nicht startet und `env: node: No such file` im Journal steht:** der
-`PATH` einer User-Unit ist minimal, eine nvm-Installation (oder pis eigene
-Node-Installation) ist dort unsichtbar. Dann **nicht** die Repo-Unit ändern, sondern
-eine lokale Drop-in-Datei anlegen — so bleibt die Unit maschinenunabhängig:
+**If the service does not start and the journal says `env: node: No such file`:**
+a user unit's `PATH` is minimal, so an nvm installation (or pi's own Node) is
+invisible there. Then **do not** edit the repo's unit — create a local drop-in,
+so the unit stays machine-independent:
 
 ```bash
 mkdir -p ~/.config/systemd/user/browser-control.service.d
@@ -248,13 +164,126 @@ EOF
 systemctl --user daemon-reload && systemctl --user restart browser-control
 ```
 
-Den Pfad `%h/.local/share/pi-node/current/bin` nur nehmen, wenn er existiert
-(`command -v node`); sonst den eigenen eintragen. `current` ist ein Symlink auf die
-aktive Version und übersteht ein node-Update.
+Use the path `%h/.local/share/pi-node/current/bin` only if it exists
+(`command -v node`); otherwise put your own there. `current` is a symlink to the
+active version and survives a Node update.
 
-### Client über HTTP (empfohlen, harness-neutral)
+### Configuration
 
-Jeder MCP-Client, der streamable HTTP und einen `Authorization`-Header kann:
+Addresses and paths can be changed through the unit's environment
+(`systemctl --user edit browser-control` → `[Service] Environment=…`):
+
+| Variable | Default | Effect |
+|---|---|---|
+| `BC_BIND` | `127.0.0.1:8110` | address of the extension socket (`[::1]:8110` for IPv6) |
+| `BC_HTTP_PORT` | `8111` | port for `POST /mcp` |
+| `BC_TOKEN_FILE` | `~/.config/browser-control/token` | where the token lives |
+| `BC_LOG` | `info` | `debug` writes each request's JSON into the journal |
+| `BC_CALL_TIMEOUT_MS`, `BC_HELLO_TIMEOUT_MS` | protocol values | deadlines; change them only while debugging |
+
+## 4. Browser: the extension
+
+The extension is **unsigned**, so it is loaded as a *temporary* add-on. There is
+no XPI to download — the source is the repo:
+
+```bash
+# from GitHub (the published state)
+git clone https://github.com/adrianhoehne/browser-control.git ~/browser-control
+
+# or over SSH from your own server, if that is where you develop
+git clone <user>@<host>:browser-control ~/browser-control
+```
+
+Without git, just the extension:
+
+```bash
+mkdir -p ~/browser-control-extension
+rsync -av --delete <user>@<host>:browser-control/extension/ ~/browser-control-extension/
+```
+
+Then in Firefox:
+
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Click **“Load Temporary Add-on…”**.
+3. **Select `extension/manifest.json`** (in the clone:
+   `~/browser-control/extension/manifest.json`) — not the folder, not a single
+   file.
+4. Right-click the icon → **“Manage Extension”** (or `about:addons` → Browser
+   Control → Preferences).
+5. Enter the endpoint: `wss://example.com/browser-control/ws` (or
+   `ws://127.0.0.1:8110` if you skip Caddy and run everything on one machine).
+6. Enter the token: the content of `~/.config/browser-control/token` from the
+   server.
+7. **Save**, then **reload the extension once** in `about:debugging` — stored
+   options take effect on the next connection attempt.
+
+The extension ID is fixed (`browser-control@bergkaese.dev`), so endpoint and
+token stay in `storage.local` across reloads. **After a Firefox restart** the
+extension is gone and has to be loaded again — the settings survive.
+
+Since spec 34 the manifest also carries **`webRequest`**: after the reload,
+`about:addons` lists the observation of network requests as an additional
+permission. It is what lets `browser_transcript` record the signed address of a
+subtitle track.
+
+Updating when the repo changes:
+
+```bash
+cd ~/browser-control && git pull
+```
+
+… then **Reload** in `about:debugging`. A changed manifest needs no second step;
+the new permission appears in `about:addons`.
+
+## 5. Check it end to end
+
+**1. The seam, in the bridge log:**
+
+```
+2026-…Z extension connected peer=127.0.0.1 protocol=1
+2026-…Z status windows=<n> tabs=<m>
+```
+
+Expect every tab of the default container, **no** tab from a multi-account
+container and none from a private window.
+
+**2. The MCP endpoint** (without printing the token):
+
+```bash
+TOKEN=$(cat ~/.config/browser-control/token)
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' http://127.0.0.1:8111/mcp \
+  | grep -o '"name":"browser_[a-z_]*"' | wc -l        # must be 13
+```
+
+**3. A first call:** ask a client for `browser_status`; it returns windows and
+tabs as JSON, agent tabs marked with `agent: true`.
+
+## 6. Tools and the three switches
+
+**Thirteen** tools, all with the `browser_` prefix: `status` (windows and tabs as
+JSON, agent tabs marked `agent: true`), `open_tab` (creates an agent tab, at most
+five), `close_tab`, `navigate`, `read`, `click`, `type`, `focus`, `inspect`,
+`eval`, `screenshot`, `frames` (iframes of the tab) and `transcript` (subtitles
+as segments with timestamps).
+
+**Three behaviours are off by default** and answer with a named error until you
+enable them (`eval_not_allowed`, `screenshot_not_allowed`, password field
+refused). The switches live in the extension's preferences:
+
+| Switch (key) | What it allows |
+|---|---|
+| “Allow password fields” (`allowPasswordFields`) | `browser_type` may fill `input[type=password]` |
+| “Allow code evaluation” (`allowEval`) | `browser_eval` runs code in the agent tab — including `document.cookie`, `localStorage` and `fetch` with the profile's cookies; also lifts the password-field block |
+| “Allow screenshots” (`allowScreenshot`) | `browser_screenshot` captures the visible part of the agent tab — the logged-in profile |
+
+A change takes effect immediately (the value is read on every call). The agent
+never flips these switches itself; that is the operator's decision.
+
+## 7. MCP client configuration
+
+Every MCP client that speaks streamable HTTP and can send an `Authorization`
+header:
 
 ```json
 {
@@ -267,11 +296,11 @@ Jeder MCP-Client, der streamable HTTP und einen `Authorization`-Header kann:
 }
 ```
 
-Das Token kommt aus der **Umgebung** (`BROWSER_CONTROL_TOKEN`); es ist dasselbe, das
-in `~/.config/browser-control/token` liegt. Ein Client, der die Variable nicht selbst
-auflöst, setzt sie in seiner eigenen Konfiguration.
+The token comes from the **environment** (`BROWSER_CONTROL_TOKEN`); it is the
+same one that sits in `~/.config/browser-control/token`. A client that does not
+expand the variable sets it in its own configuration.
 
-So sieht es für pi aus (`~/.pi/agent/mcp.json`, unter `mcpServers`):
+That is how it looks for pi (`~/.pi/agent/mcp.json`, under `mcpServers`):
 
 ```json
 {
@@ -284,9 +313,9 @@ So sieht es für pi aus (`~/.pi/agent/mcp.json`, unter `mcpServers`):
 }
 ```
 
-### Rückfallweg: stdio (der alte Eintrag bleibt gültig)
+### Fallback: stdio (the old entry stays valid)
 
-Clients, die nur einen Prozess starten können, spawnen die Bridge selbst:
+Clients that can only spawn a process start the bridge themselves:
 
 ```json
 {
@@ -299,56 +328,68 @@ Clients, die nur einen Prozess starten können, spawnen die Bridge selbst:
 }
 ```
 
-Dieser Weg läuft **nicht neben** dem Dienst: Port `8110` wäre doppelt belegt, die
-gespawnte Bridge endet mit `1`. Für den stdio-Weg also den Dienst stoppen
+This path does **not** run next to the service: port `8110` would be taken twice
+and the spawned bridge exits with `1`. For stdio, stop the service first
 (`systemctl --user stop browser-control`).
 
-**`/mcp` ist loopback-only und darf nie über einen Proxy veröffentlicht werden.**
-Wer den Port nach außen reicht, gibt dem eingeloggten Firefox samt Token einen
-öffentlichen Eingang.
+**`/mcp` is loopback-only and must never be published through a proxy.** Whoever
+exposes that port hands the world an entry to the logged-in Firefox plus its
+token.
 
-### Werkzeuge
+## 8. Troubleshooting
 
-**Dreizehn**, alle mit dem Präfix `browser_`:
-`status` (Fenster und Tabs als JSON, Agenten-Tabs mit `agent: true`), `open_tab`
-(legt einen Agenten-Tab an, höchstens fünf), `close_tab`, `navigate`, `read`,
-`click`, `type`, `focus`, `inspect`, `eval`, `screenshot`, `frames` (iframes des
-Tabs) und `transcript` (Untertitel als Segmente mit Zeitstempeln).
-
-**Drei Verhalten sind per Voreinstellung aus** und antworten bis zum Umlegen mit
-einem benannten Fehler (`eval_not_allowed`, `screenshot_not_allowed`,
-Passwortfeld abgelehnt). Die Schalter stehen in den Add-on-Einstellungen:
-
-| Schalter (Schlüssel) | Was er erlaubt |
+| Symptom | Look here |
 |---|---|
-| „Passwortfelder erlauben" (`allowPasswordFields`) | `browser_type` darf `input[type=password]` füllen |
-| „Code-Auswertung erlauben" (`allowEval`) | `browser_eval` führt Code im Agenten-Tab aus — inklusive `document.cookie`, `localStorage` und `fetch` mit den Cookies des Profils; hebt zusätzlich die Passwortfeld-Sperre auf |
-| „Bildschirmfotos erlauben" (`allowScreenshot`) | `browser_screenshot` nimmt den sichtbaren Ausschnitt des Agenten-Tabs auf — das eingeloggte Profil |
+| `env: node: No such file` in the journal | `PATH` of the user unit — see the drop-in in section 3 |
+| `status windows=… tabs=0` | Firefox has no agent tab yet; `browser_navigate` creates one |
+| Nothing in the log, no `extension connected` | extension console (`about:debugging` → “Inspect”), not the page console. `bc: background page started`, `bc: endpoint invalid: …`, or nothing at all. Silence usually means: endpoint or token empty, or step 4.7 (the reload) was skipped |
+| `auth failed` in the bridge log | the token differs between file and extension options — section 2, “Rotating the token” |
+| `502` from a proxy | bridge not listening, or the upstream is `localhost` instead of `127.0.0.1` — section 9 |
+| Tools missing in the client | the service or the extension still runs the old code: restart it / reload the extension |
 
-Ein Umstellen wirkt sofort (der Wert wird bei jedem Aufruf gelesen); der Agent
-schaltet **keinen** dieser Schalter selbst um, das entscheidet der Betreiber
-(`CONTRIBUTING.md`).
+## 9. Optional: a public endpoint via Caddy
 
-`browser_navigate` legt beim ersten Aufruf einen **Agenten-Tab** an: ein normaler Tab
-im Default-Container, im Hintergrund, den du in der Tableiste siehst. Mit
-`browser_open_tab` kommen weitere dazu — **bis zu fünf**; jeder ist über den
-Parameter `tab` einzeln adressierbar, ohne `tab` gilt der zuletzt benutzte. Schließt
-du einen, rücken die anderen nach.
+Only needed if the browser is on a **different** machine than the bridge and you
+want the connection to cross the network. Everything above works without Caddy
+(plain `ws://127.0.0.1:8110`).
 
-Seit `browser_read` steht bei der Erweiterung in `about:addons` **„Zugriff auf alle
-Websites"** — die bewusste Entscheidung des Betreibers, damit der Agent Seiten lesen
-kann. Sie liest nur, was sie lesen soll: den adressierten Agenten-Tab, und nur wenn
-ein Werkzeug aufgerufen wird.
+The extension connects to `wss://example.com/browser-control/ws`; Caddy
+terminates TLS and forwards to the bridge on `127.0.0.1:8110`. The site block
+serves basic auth today, and a browser `WebSocket` cannot set an
+`Authorization` header — so the path has to sit outside the auth.
 
-## 6. Prüfen
+The shape matters: **one `handle` alone is not enough.** In Caddy's directive
+order `basic_auth` runs before `handle`, so a site-wide auth also runs before the
+WS branch; two `handle` blocks below it change nothing. The auth has to move
+**into the second `handle`**; then the branches exclude each other (same group,
+first match wins) and the WS branch comes first:
 
-Nach Änderungen im Repo muss die Extension **einmal neu geladen** werden
-(`about:debugging` → Reload), sonst läuft der alte Background im Speicher
-weiter — ein neues Werkzeug wie `transcript` fehlt ihm dann. **Hat sich das
-Manifest geändert** (Berechtigungen), ist der Reload ebenfalls der einzige
-Schritt; die neue Berechtigung steht danach in `about:addons`.
+```
+example.com {
+    # the extension authenticates with the token in the hello frame
+    handle /browser-control/ws {
+        reverse_proxy 127.0.0.1:8110
+    }
 
-Erst die Naht, ohne Firefox:
+    handle {
+        # … your existing configuration, including basic_auth …
+    }
+}
+```
+
+The upstream must say **`127.0.0.1`**, not `localhost`: Caddy may resolve
+`localhost` to `[::1]`, the bridge listens on `127.0.0.1` only, and the result is
+a `502` while the bridge is running fine (in the Caddy log:
+`dial tcp [::1]:8110: connect: connection refused`).
+
+Validate and reload:
+
+```bash
+caddy validate --config /etc/caddy/Caddyfile   # exit 0
+systemctl reload caddy
+```
+
+Check the seam without Firefox:
 
 ```bash
 curl -isS --http1.1 -o /dev/null -w '%{http_code}\n' --max-time 10 \
@@ -358,41 +399,24 @@ curl -isS --http1.1 -o /dev/null -w '%{http_code}\n' --max-time 10 \
   https://example.com/browser-control/ws
 ```
 
-`--http1.1` ist Pflicht, nicht Kosmetik: curl verhandelt sonst HTTP/2 mit Caddy,
-und ein h2-Request wird als normale Anfrage an den h1-Upstream weitergereicht.
-Firefox spricht für `wss://` ohnehin HTTP/1.1.
+`--http1.1` is mandatory, not cosmetic: curl would otherwise negotiate HTTP/2
+with Caddy, and an h2 request is passed on to the h1 upstream as an ordinary
+request. Firefox speaks HTTP/1.1 for `wss://` anyway.
 
-| Ausgabe | Bedeutung |
+| Output | Meaning |
 |---|---|
-| `101` | Naht steht |
-| `401` | Basic-Auth greift noch (Auth steht auf Site-Ebene statt im zweiten `handle`) |
-| `426` | Bridge lebt, sah aber keine Upgrade-Anfrage — fast immer fehlt `--http1.1` |
-| `502` | Caddy kommt durch, aber die Bridge lauscht nicht auf dem Upstream |
+| `101` | the seam works |
+| `401` | basic auth still catches it (auth at site level instead of the second `handle`) |
+| `426` | bridge alive, but it saw no upgrade request — almost always the missing `--http1.1` |
+| `502` | Caddy gets through, but the bridge is not listening on the upstream |
 
-Dann im Bridge-Log:
+## Not covered
 
-```
-2026-…Z extension connected peer=127.0.0.1 protocol=1
-2026-…Z status windows=<n> tabs=<m>
-```
-
-Mit `BC_LOG=debug` steht darunter das JSON. Erwartung: alle Tabs des
-Default-Containers, **kein** Tab aus einem Multi-Account-Container und kein Tab
-aus einem privaten Fenster.
-
-Kommt keine Zeile: zuerst in der Konsole **der Erweiterung** nachsehen
-(`about:debugging` → „Untersuchen"), nicht in der Web-Konsole der Seite. Dort
-steht `bc: background page started`, `bc: Endpunkt ungültig: …` oder nichts.
-Schweigen heißt meistens: Endpunkt oder Token leer, oder der Reload aus
-Schritt 4.7 fehlt.
-
-## Nicht abgedeckt
-
-- **Signierung und XPI-Auslieferung** — die Erweiterung ist temporär, nach einem
-  Firefox-Neustart neu zu laden.
-- **Der stdio-Rückfall neben dem Dienst** — Port `8110` wäre doppelt belegt (siehe
-  §5); entweder Dienst oder stdio.
-- **Token-Rotation und mehrere Tokens** — ein Token, eine Extension; wer es
-  ersetzt, muss es an beiden Seiten tauschen.
-- **Automatisches Neuladen der Extension nach Optionsänderung** — deshalb
-  Schritt 4.7.
+- **Signing and XPI distribution** — the extension is temporary; after a Firefox
+  restart it has to be loaded again.
+- **The stdio fallback next to the service** — port `8110` would be taken twice
+  (see section 7); either the service or stdio.
+- **Token rotation across several machines** — one token, one extension; whoever
+  replaces it has to change it on both sides.
+- **Reloading the extension automatically after an option change** — hence step
+  4.7.

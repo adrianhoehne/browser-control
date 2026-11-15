@@ -141,7 +141,7 @@ Keine Änderung. Die Durchreiche aus Spec 10 trägt das dritte Feld mit, weil si
 4. Eine 403-Antwort mit `text/html` ergibt `contentType: null` — der Typ der
    Fehlerseite wird nicht als Typ des Dokuments ausgegeben.
 
-**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 2 ist
+**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 2 ist
 ein Live-Beleg und erst nach den Handgriffen möglich (Extension neu laden, pi neu
 starten, `git pull` aus dem Betreiber-Klon). Kriterien 1, 3 und 4 laufen vor dem
 Commit, Kriterium 2 danach; fällt es rot aus, wird vorwärts korrigiert und die

@@ -79,7 +79,7 @@ betrafen genau diesen Teil (siehe `## Review` und `## Log`).
 | `bridge/bridge.mjs` | `installShutdownHandlers` hört auf `SIGTERM` und `SIGINT` (`:161`–`:162`); `stdinIsClientChannel` fragt `isFIFO()`/`isSocket()` (`:183`); `startMcpServer` läuft unbedingt (`:245`); `main()` läuft beim Import (`:286`), es gibt **keinen** Export; die Port-Zeile entsteht privat in `logBindFailure`/`describePortOwner` (`:87`–`:99`) | Signalliste statt zwei fester Zeilen (`SIGBREAK` auf `win32`); stdio nur, wenn `process.stdin.isTTY` falsch ist; `portInUseLine` exportiert und mit injizierbarer Besitzersuche; ein Wächter macht die Datei importierbar |
 | `test/bridge.test.js` | 4 `skip:`-Zeilen (`:592`, `:624` und zwei `/proc`-Fälle), 6 `SIGTERM`-Fälle (`:368`, `:404`, `:432`, `:463`, `:500`, `:529`) | die 6 Signal-Fälle tragen `{ skip: SKIP_ON_WINDOWS }`, dazu ein `SIGINT`-Fall und drei Unit-Fälle (`mcpStdioEnabled`, `portInUseLine`) |
 | `test/http-mcp.test.js` | ein `SIGTERM`-Fall (`:356`) | derselbe Skip; sonst unverändert |
-| `CONTRIBUTING.md`, `## Abnahme` | eine Liste ohne Plattformhinweis | ein Absatz darunter, welche Zeile plattformabhängig ist; keine bestehende Zeile geändert |
+| `CONTRIBUTING.md`, `## Acceptance` | eine Liste ohne Plattformhinweis | ein Absatz darunter, welche Zeile plattformabhängig ist; keine bestehende Zeile geändert |
 | `INSTALL.md` | `## 3` sagt „Nicht dauerhaft", `## 5` heißt „(empfohlen)" | zwei Empfehlungszeilen gedreht, ein Abschnitt am Ende; **keine Befehlszeile** in `## 1`–`## 6` geändert |
 | `docs/18-dienst-und-http-mcp.md` | `:351`–`:354`: „`startMcpServer` läuft unbedingt weiter" | die Amendments unten; `docs/README.md` verlangt die Nachziehung in der Stufe, die das Verhalten umsetzt |
 
@@ -97,9 +97,9 @@ betrafen genau diesen Teil (siehe `## Review` und `## Log`).
 
 ## Acceptance criteria
 
-**Ausnahme mit Datum** (2026-11-06, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 1, 3b, 5 und
+**Ausnahme mit Datum** (2026-11-06, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 1, 3b, 5 und
 die Windows-Hälfte von 7 sind nur auf einem Windows-Rechner messbar und werden vom
-Betreiber abgehakt — das ist der allgemeine Satz aus `## Abnahme` („wo ein Kriterium
+Betreiber abgehakt — das ist der allgemeine Satz aus `## Acceptance` („wo ein Kriterium
 nur im echten Profil entscheidbar ist, steht das dort"), **nicht** die Ausnahme vom
 2026-10-23, die Messungen nach dem Commit erlaubt. Kriterium 2 braucht beide Läufe.
 **Diese Liste gilt überall in dieser Spec**, auch in `## Bekannte Lücken` und Stufe 4.
@@ -257,7 +257,7 @@ Vorwärtsschrägstrichen geschrieben.
    `test/bridge.test.js test/http-mcp.test.js` ⇒ `# fail 0`, `# cancelled 0`,
    `# skipped 0`; `git grep -n "skip:" -- test/` ⇒ **12** Zeilen.
 
-4. **`CONTRIBUTING.md`, `## Abnahme`.** Ein Absatz unter dem Block: `npm run check` hängt
+4. **`CONTRIBUTING.md`, `## Acceptance`.** Ein Absatz unter dem Block: `npm run check` hängt
    nicht mehr an Shell-Werkzeugen (Spec 29); auf Windows meldet `npm test`
    `# skipped N` mit N >= 12, `# fail 0` und `# cancelled 0` bleiben Pflicht; alles
    in Git Bash außer `Strg+Untbr` und dem Tastendruck aus Kriterium 7, die ein echtes
@@ -435,7 +435,7 @@ Diese Spec dreht eine Zusage um, die `docs/18` ausdrücklich festhält.
 ## Touch boundary
 
 - `bridge/bridge.mjs`, `test/bridge.test.js`, `test/http-mcp.test.js`, `CONTRIBUTING.md`
-  (`## Abnahme`), `INSTALL.md` (zwei Empfehlungszeilen plus ein Abschnitt am Ende),
+  (`## Acceptance`), `INSTALL.md` (zwei Empfehlungszeilen plus ein Abschnitt am Ende),
   `docs/18-dienst-und-http-mcp.md` (nur die Amendments-Zeile), diese Spec,
   `docs/README.md`, `docs/ROADMAP.md`, `docs/PROJECT-STATE.md`.
 - **Nicht anfassen:** `extension/*` (kein `manifest.json`, kein `background.js`),

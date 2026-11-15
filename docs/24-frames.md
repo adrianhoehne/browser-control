@@ -142,7 +142,7 @@ Lesevorgang wie `status`.
 
 ## Acceptance criteria
 
-**Ausnahme mit Datum** (2026-10-27, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 7 ist
+**Ausnahme mit Datum** (2026-10-27, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 7 ist
 live und nach dem Commit zu messen; **Kernannahme** ist Kriterium 6 (live).
 
 1. **Ohne `frame` unverändert** (lokal). `read` injiziert weiter in

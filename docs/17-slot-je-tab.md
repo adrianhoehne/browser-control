@@ -101,7 +101,7 @@ Keine Änderung.
    ausführt. Beide Antworten entstehen in der Extension; ein serialisierender Browser
    zeigte sich als **Zeit**, nicht als `superseded`.
 
-**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Abnahme`): Kriterium 5 ist erst
+**Ausnahme mit Datum** (2026-10-23, `CONTRIBUTING.md`, `## Acceptance`): Kriterium 5 ist erst
 nach Reload und Neustart messbar. Kriterien 1–4 laufen vor dem Commit. Ist die
 **Kernannahme** widerlegt (Firefox serialisiert die Injektionen so, dass ein Tab den
 anderen blockiert), geht das Inkrement zurück in diese Spec — der Slot bleibt dann
