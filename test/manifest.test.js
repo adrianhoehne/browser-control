@@ -91,7 +91,7 @@ test("optionsHtml_forThePasswordSwitch_shouldCarryACheckboxNamedAllowPasswordFie
   // would store the wrong thing and still look right in the markup:
   assert.notEqual(checkbox, null, 'options.html must carry id="allowPasswordFields"');
   assert.match(checkbox[0], /type="checkbox"/);
-  assert.match(html, /Passwortfelder erlauben/, "the visible label is part of the contract");
+  assert.match(html, /Allow password fields/, "the visible label is part of the contract");
 });
 
 test("optionsJs_forThePasswordSwitch_shouldNameTheSameKeyLiteralAsTheCheckbox", async () => {
@@ -130,14 +130,14 @@ test("optionsHtml_forTheEvalSwitch_shouldCarryACheckboxNamedAllowEval", async ()
   // and still look like a switch in the markup:
   assert.notEqual(checkbox, null, 'options.html must carry id="allowEval"');
   assert.match(checkbox[0], /type="checkbox"/);
-  assert.match(html, /Code-Auswertung erlauben/, "the visible label is part of the contract");
+  assert.match(html, /Allow code evaluation/, "the visible label is part of the contract");
 });
 
 /**
  * The markup of the `allowEval` box: from its own `<input>` to the submit button.
  *
  * Sliced on purpose instead of searching the whole document: the password box above
- * already carries the word „Passwortfelder" in its label, so a case that searched
+ * already carries the words “password fields” in its label, so a case that searched
  * `html` would stay green even if the new hint said nothing about what it unlocks.
  */
 function allowEvalBlockOf(html) {
@@ -158,12 +158,12 @@ test("optionsHtml_forTheEvalSwitch_shouldNameWhatItUnlocks", async () => {
   // `localStorage`, `fetch` with the profile's cookies), the fact that the page may be
   // changed, the lifted password-field lock and the frozen tab — a switch the operator
   // cannot price is not a decision:
-  assert.match(block, /Passwortfelder/, "the hint must name the lifted password-field lock");
-  assert.match(block, /einfrieren/, "the hint must name the frozen tab");
+  assert.match(block, /password fields/, "the hint must name the lifted password-field lock");
+  assert.match(block, /freeze/, "the hint must name the frozen tab");
   assert.match(block, /localStorage/);
   assert.match(block, /HttpOnly/);
   assert.match(block, /fetch/);
-  assert.match(block, /ändern/);
+  assert.match(block, /change/);
 });
 
 test("optionsJs_forTheEvalSwitch_shouldNameTheSameKeyLiteralAsTheCheckbox", async () => {
@@ -222,7 +222,7 @@ test("optionsHtml_forTheScreenshotSwitch_shouldCarryACheckboxNamedAllowScreensho
   // `"on"` and still look like a switch in the markup:
   assert.notEqual(checkbox, null, 'options.html must carry id="allowScreenshot"');
   assert.match(checkbox[0], /type="checkbox"/);
-  assert.match(html, /Bildschirmfotos erlauben/, "the visible label is part of the contract");
+  assert.match(html, /Allow screenshots/, "the visible label is part of the contract");
 });
 
 /**
@@ -249,9 +249,9 @@ test("optionsHtml_forTheScreenshotSwitch_shouldNameWhatItExposes", async () => {
   // THEN it has to name the picture itself, the logged-in profile and the mailbox —
   // a switch the operator cannot price is not a decision, and "a screenshot" alone
   // does not say that the operator's inbox may be in it:
-  assert.match(block, /Bildschirmfotos/, "the hint must name the pictures it allows");
-  assert.match(block, /Profil/, "the hint must name the profile whose data shows up");
-  assert.match(block, /Postfach/, "the hint must name the mailbox as one example");
+  assert.match(block, /image/, "the hint must name the pictures it allows");
+  assert.match(block, /profile/, "the hint must name the profile whose data shows up");
+  assert.match(block, /mailbox/, "the hint must name the mailbox as one example");
 });
 
 test("optionsJs_forTheScreenshotSwitch_shouldNameTheSameKeyLiteralAsTheCheckbox", async () => {

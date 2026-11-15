@@ -685,3 +685,9 @@ Messlauf (2026-10-23, Kriterium 6) — erfüllt:
 - **Sichtbarkeit im Feld war nicht prüfbar** (die Werkzeuge lesen keine
   Eingabewerte); deshalb Stage 7 (Fokus, `beforeinput`, Nachsetzen), die vor dem
   `active` gebaut und geprüft wurde.
+
+- **2026-11-15 — sichtbare Labels sind englisch.** Der Betreiber hat die
+  Optionsseite übersetzen lassen (das Projekt ist öffentlich, die Doku ist
+  englisch). Die Zitate oben beschreiben den Stand ihrer Zeit; im Code heißt
+  der Schalter jetzt **“Allow password fields”**. Einzelnachweis: `extension/options.html`,
+  `test/manifest.test.js`.

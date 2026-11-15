@@ -36,6 +36,10 @@ Menüeintrag, und der Paar-Eintrag in der Gegenprobe der Menüzahl.
 
 **Teststand:** 760 Tests grün, `npm run check` 0.
 
+**Sprache der Optionsseite (2026-11-15):** die sichtbaren Texte der
+Erweiterungs-Einstellungen sind **englisch** (Betreiberentscheid, das Projekt ist
+öffentlich). Werkzeugfehler und Logzeilen bleiben deutsch.
+
 **Was bleibt (dokumentiert, nicht behoben):** das Etikett einer YouTube-Spur
 kann lügen (auf `wKv-g1uEoDY` ist die einzige Spur `ja` etikettiert und
 enthält deutschen Text — Spracherkennung ist `## Non-goals`); die Gültigkeit
@@ -550,7 +554,7 @@ verhandeln; wenn eine davon falsch ist, gehört das in eine Spec mit
   `npm run check` 0, keine Secrets, `extension/manifest.json` unberührt).
   Spec-Review-Gate `✅` nach drei Runden (13 + 9 + 4 Befunde), Code-Review-Gate
   `✅` nach einer Runde, acht Zeilen nachgezogen. Das Werkzeug ist das elfte und
-  läuft hinter dem Schalter **„Bildschirmfotos erlauben"** (`allowScreenshot`,
+  läuft hinter dem Schalter **“Allow screenshots”** (`allowScreenshot`,
   Default aus). Es liefert den sichtbaren Ausschnitt als Base64: PNG, wenn es
   unter 512 KiB bleibt, sonst die Leiter (JPEG q=0,75 bei max. 1600 px → q=0,5 →
   max. 1200 px bei q=0,6), erst danach `screenshot_too_large` mit den Zahlen der
@@ -732,7 +736,7 @@ verhandeln; wenn eine davon falsch ist, gehört das in eine Spec mit
   trug den Begriff als Query-Parameter und die Trefferliste gehörte zur Suche.
   Die Schreibsequenz ist seitdem robuster (Fokus, `beforeinput`, Nachsetzen im
   nächsten Task), weil nicht prüfbar war, ob ein kontrolliertes Feld den Wert
-  anzeigt. Passwortfelder sind über die Option „Passwortfelder erlauben"
+  anzeigt. Passwortfelder sind über die Option “Allow password fields”
   gesperrt (Default aus); die Regel „Anmeldung macht der Betreiber" in
   `CONTRIBUTING.md` gilt nur noch bei ausgeschalteter Option. 227 Tests.
 - **Spec 06 (Klicken) ist `active` und belegt** (2026-10-23): `browser_click`

@@ -26,9 +26,9 @@
   const ALLOW_EVAL = "allowEval";
   const ALLOW_SCREENSHOT = "allowScreenshot";
 
-  const STATUS_LOAD_FAILED = "Einstellungen konnten nicht geladen werden.";
-  const STATUS_SAVED = "Gespeichert.";
-  const STATUS_SAVE_FAILED = "Speichern fehlgeschlagen. Einzelheiten stehen in der Konsole der Erweiterung.";
+  const STATUS_LOAD_FAILED = "Settings could not be loaded.";
+  const STATUS_SAVED = "Saved.";
+  const STATUS_SAVE_FAILED = "Saving failed. Details are in the extension's console.";
 
   function readFieldValue(fieldId) {
     return document.getElementById(fieldId).value;

@@ -31,7 +31,7 @@ const NO_ENV = {};
 // Not a usable token, and deliberately not a 32+-hex literal: the "no secrets in
 // the repo" rule greps for exactly that shape.
 const TOKEN = "token-from-the-options-page";
-const MANIFEST_VERSION = "0.3.0";
+const MANIFEST_VERSION = "0.4.0";
 const BROWSER_INFO = { name: "Firefox", version: "152.0.3" };
 
 const SOCKET_CONNECTING = 0;

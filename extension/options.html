@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Browser Control — Einstellungen</title>
+    <title>Browser Control — Options</title>
     <style>
       body {
         font-family: system-ui, sans-serif;
@@ -46,12 +46,12 @@
   <body>
     <h1>Browser Control</h1>
     <p class="hint">
-      Endpunkt der Bridge und dasselbe Token wie auf dem Server. Der Endpunkt ist
-      vorbelegt; ohne Token baut die Extension bewusst keine Verbindung auf.
+      The bridge's endpoint and the same token as on the server. The endpoint is
+      pre-filled; without a token the extension deliberately does not connect.
     </p>
 
     <form id="settings-form">
-      <label for="endpoint">Endpunkt-URL</label>
+      <label for="endpoint">Endpoint URL</label>
       <input
         id="endpoint"
         name="endpoint"
@@ -59,51 +59,53 @@
         spellcheck="false"
         autocomplete="off"
       />
-      <p class="hint">Die URL nur ändern, wenn die Bridge auf einem anderen Rechner läuft — dann die Adresse dort eintragen, für den öffentlichen Weg über Caddy die <code>wss://</code>-URL aus <code>INSTALL.md</code> §9.</p>
+      <p class="hint">
+        Change this URL only if the bridge runs on another machine — then enter that
+        machine's address; for the public route through Caddy use the
+        <code>wss://</code> URL from <code>INSTALL.md</code> §9.
+      </p>
 
       <label for="token">Token</label>
       <input id="token" name="token" type="password" spellcheck="false" autocomplete="off" />
 
       <label class="checkbox" for="allowPasswordFields">
         <input id="allowPasswordFields" name="allowPasswordFields" type="checkbox" />
-        Passwortfelder erlauben
+        Allow password fields
       </label>
       <p class="hint">
-        Ist die Option aus, lehnt der Agent jedes Feld mit
-        <code>type="password"</code> ab, ohne etwas hineinzuschreiben. Der Wert
-        wird bei jedem Aufruf gelesen, ein Umstellen wirkt also sofort.
+        While this is off, the agent refuses every field with
+        <code>type="password"</code> without writing into it. The value is read on
+        every call, so a change takes effect immediately.
       </p>
 
       <label class="checkbox" for="allowEval">
         <input id="allowEval" name="allowEval" type="checkbox" />
-        Code-Auswertung erlauben
+        Allow code evaluation
       </label>
       <p class="hint">
-        Ist die Option an, darf der Agent beliebigen Code im Seitenkontext
-        ausführen. Der Code kommt damit an dieselben Daten wie die Seite selbst,
-        einschließlich <code>document.cookie</code> (aber nicht der
-        <code>HttpOnly</code>-Cookies), <code>localStorage</code> und
-        <code>fetch</code> mit den Cookies dieses Profils. Er darf die Seite
-        <strong>ändern</strong> und hebt die Sperre für
-        <strong>Passwortfelder</strong> auf. Ein Code, der nie zurückkehrt, kann
-        den Tab <strong>einfrieren</strong>; nur Schließen des Tabs hilft dann.
-        Der Wert wird bei jedem Aufruf gelesen, ein Umstellen wirkt also sofort.
+        While this is on, the agent may run arbitrary code in the page context. The
+        code then reaches the same data as the page itself, including
+        <code>document.cookie</code> (but not <code>HttpOnly</code> cookies),
+        <code>localStorage</code> and <code>fetch</code> with this profile's
+        cookies. It may <strong>change</strong> the page and lifts the lock on
+        <strong>password fields</strong>. Code that never returns can
+        <strong>freeze</strong> the tab; only closing the tab helps then. The value
+        is read on every call, so a change takes effect immediately.
       </p>
 
       <label class="checkbox" for="allowScreenshot">
         <input id="allowScreenshot" name="allowScreenshot" type="checkbox" />
-        Bildschirmfotos erlauben
+        Allow screenshots
       </label>
       <p class="hint">
-        Ist die Option aus, lehnt der Agent jede Aufnahme ab. Ist sie an, sieht
-        er den <strong>sichtbaren Ausschnitt</strong> des Agenten-Tabs als Bild —
-        also genau das, was auf dem Bildschirm steht: das eingeloggte Profil mit
-        Postfach, Warenkorb oder Kontodaten. Verdeckte Tabs und andere Fenster
-        sind nicht im Bild. Der Wert wird bei jedem Aufruf gelesen, ein
-        Umstellen wirkt also sofort.
+        While this is off, the agent refuses every capture. While it is on, it sees
+        the <strong>visible part</strong> of the agent tab as an image — exactly
+        what is on screen: the logged-in profile with its mailbox, shopping cart or
+        account data. Hidden tabs and other windows are not in the picture. The
+        value is read on every call, so a change takes effect immediately.
       </p>
 
-      <button type="submit">Speichern</button>
+      <button type="submit">Save</button>
     </form>
 
     <p id="status" role="status"></p>

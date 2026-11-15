@@ -3,6 +3,20 @@
 Alle nennenswerten Änderungen. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.4.0] — 2026-11-15
+
+**Die Einstellungsseite der Erweiterung ist englisch.** Das Projekt ist
+öffentlich und die Doku ist englisch; die Optionen folgen jetzt.
+
+- Labels: „Endpoint URL", „Token", „Allow password fields", „Allow code
+  evaluation", „Allow screenshots", „Save"; die Hinweistexte sind übersetzt,
+  `lang="en"`.
+- Die Statuszeilen der Seite („Saved.", „Settings could not be loaded.") ebenso.
+- **Unverändert deutsch** bleiben die Meldungen, die der Agent sieht
+  (Werkzeugfehler, Logzeilen) — sie richten sich an den Betreiber, nicht an den
+  Browser.
+- 760 Tests (die Manifest-Pins prüfen die englischen Labels).
+
 ## [0.3.0] — 2026-11-15
 
 **Der Endpunkt muss nicht mehr getippt werden.** Läuft die Bridge auf derselben

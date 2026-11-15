@@ -101,8 +101,10 @@ No commit without green acceptance **and** a `✅` from step 6.
   `## Testing`, `## Acceptance criteria`, `## Dev plan`, `## Open questions`,
   `## Additional dependencies`, `## Dependency changes`.
 - **Code: English** — identifiers, comments, file names.
-- **Visible text: German** — what a human reads on screen in the extension's UI.
-  The exception is what appears towards a web page; that follows the page.
+- **Visible text: English** in the extension's own options page (since
+  2026-11-15; the project is public). Everything the agent reports to the
+  operator — tool errors, log lines — stays German, and so does text that
+  appears towards a web page; that follows the page.
 
 ## Rules
 

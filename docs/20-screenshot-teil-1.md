@@ -980,3 +980,9 @@ Nebenbefund, außerhalb des Inkrements: die Abnahme hing zweimal ohne Meldung
 (`test/http-transport.test.js`, `test/mcp.test.js`). Seit 2026-10-27 läuft
 `npm test` mit `--test-timeout=120000`; ein Hänger scheitert nach 2 Minuten,
 statt die Abnahme offen zu halten (eigener Commit `5496e64`).
+
+- **2026-11-15 — sichtbare Labels sind englisch.** Der Betreiber hat die
+  Optionsseite übersetzen lassen (das Projekt ist öffentlich, die Doku ist
+  englisch). Die Zitate oben beschreiben den Stand ihrer Zeit; im Code heißt
+  der Schalter jetzt **“Allow screenshots”**. Einzelnachweis: `extension/options.html`,
+  `test/manifest.test.js`.

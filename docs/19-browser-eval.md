@@ -851,3 +851,9 @@ Code-Review Runde 3 (Nacharbeit aus der Live-Abnahme) — Gate mit `✅ Ship it`
   `#logDebugResult` hängt strukturell nur am Erfolgspfad.
 - **T7** (die Bridge kann Seitenmeldung und Extension-Meldung nicht
   unterscheiden) — nicht umgesetzt, wäre ein eigener Spec-Schnitt.
+
+- **2026-11-15 — sichtbare Labels sind englisch.** Der Betreiber hat die
+  Optionsseite übersetzen lassen (das Projekt ist öffentlich, die Doku ist
+  englisch). Die Zitate oben beschreiben den Stand ihrer Zeit; im Code heißt
+  der Schalter jetzt **“Allow code evaluation”**. Einzelnachweis: `extension/options.html`,
+  `test/manifest.test.js`.
