@@ -40,6 +40,9 @@ ls -l ~/.config/browser-control/token   # -rw------- (600)
 wc -c < ~/.config/browser-control/token # 65 = 64 hex characters + newline
 ```
 
+**Or skip to section 3:** `./scripts/install.sh` does this step and the service
+setup in one command and keeps an existing token untouched.
+
 The trailing newline is fine: the bridge trims the content before comparing.
 That path is the default of `BC_TOKEN_FILE`; if you change it, start the bridge
 with the same value.
@@ -79,6 +82,47 @@ is lost.
 `auth failed` in the bridge log.
 
 ## 3. Server: the bridge
+
+### One command: token, unit and service
+
+```bash
+cd ~/browser-control
+./scripts/install.sh
+```
+
+It writes the token (only if there is none), installs the user unit, reloads
+systemd, enables and starts the service and checks that it is `active`. At the end
+it prints the endpoint and the token — **once**, on stdout — together with the four
+Firefox steps that remain manual work: no page and no script may touch
+`about:debugging` or the extension's `storage.local`.
+
+It needs **no root**: everything happens in your own `$HOME`, and nothing is written
+outside `~/.config/browser-control/` and `~/.config/systemd/user/`.
+
+| Option | Effect |
+|---|---|
+| *(none)* | install or repair, then check and say what is left to do |
+| `--dry-run` | announce every step; write nothing, start nothing |
+| `--print-token` | print the existing token and do nothing else |
+| `--fix-path` | install as usual and also write the `PATH` drop-in when `node` is not in `/usr/bin` |
+| `--uninstall` | stop and disable the service, remove the unit; **the token stays** |
+| `--help` | the options and what they do |
+
+| Exit code | Meaning |
+|---|---|
+| `0` | success |
+| `1` | aborted: a preflight check failed (Node ≥ 22, clone path, `$HOME`, ports `8110`/`8111`), an unknown option, the service was not `active` after the start, or a write target fell outside the two allowed directories |
+| `2` | the token is missing or shorter than 32 hex characters — the same code the bridge uses |
+
+- **An existing token is never overwritten.** Rotation stays manual work (section
+  2, “Rotating the token”): reinstalling must not silently log the extension out.
+- **It is idempotent.** A second run changes nothing that already matches, so
+  running it twice is the way to repair a setup.
+- **The threshold is the bridge's:** 32 hex characters at the least. A token with
+  32–63 characters is accepted with a hint; below 32 the run stops with exit `2`.
+
+What it does is exactly the two subsections below — read them when you want to
+change a single step instead of running all of them.
 
 ### Try it by hand first
 

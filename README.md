@@ -51,18 +51,18 @@ the end.
 Short version for one machine without a proxy:
 
 ```bash
-# 1. token
-install -d -m 700 ~/.config/browser-control
-openssl rand -hex 32 > ~/.config/browser-control/token
-chmod 600 ~/.config/browser-control/token
+# 1. server side: token file, systemd user unit, service start — one command
+cd ~/browser-control
+./scripts/install.sh
 
-# 2. bridge as a service
-cp deploy/browser-control.service ~/.config/systemd/user/
-systemctl --user daemon-reload && systemctl --user enable --now browser-control
-
-# 3. extension: about:debugging#/runtime/this-firefox → "Load Temporary Add-on…"
+# 2. extension: about:debugging#/runtime/this-firefox → "Load Temporary Add-on…"
 #    → pick extension/manifest.json, then set endpoint and token under Preferences.
 ```
+
+`./scripts/install.sh --dry-run` shows what the first step would do without writing
+anything. The manual equivalent — `openssl rand -hex 32` for the token, `cp` of the
+unit plus `systemctl --user enable --now` — is in [INSTALL.md](INSTALL.md)
+sections 2 and 3, for when you want to see or change a single step.
 
 The extension is **unsigned**. After a Firefox restart it is gone and has to be
 loaded again; signing through AMO is not set up.
@@ -72,7 +72,7 @@ loaded again; signing through AMO is not set up.
 There are **no dependencies** — Node ≥ 22 is enough:
 
 ```bash
-npm test        # 736 cases, TAP output, ~90 s
+npm test        # 757 cases, TAP output, ~95 s
 npm run check   # node --check over every .js/.mjs
 ```
 

@@ -112,6 +112,7 @@ Schritt — bei einem handgestarteten Bridge aus `INSTALL.md` §3 ist das
 | `test/install.test.js` | `install_printTokenPrintsOnlyTheToken` | `--print-token`: nur das Token, kein `systemctl`, kein Schreiben |
 | `test/install.test.js` | `install_installsAndStartsTheUnit` | Unit liegt unter `~/.config/systemd/user/`; `daemon-reload` vor `enable --now`, danach `is-active` |
 | `test/install.test.js` | `install_isIdempotent` | zweiter Lauf: `openssl` einmal, Unit-`mtimeNs` gleich, eigener Dienst kein Portkonflikt |
+| `test/install.test.js` | `install_dryRunUninstallKeepsTheUnit` | `--dry-run --uninstall` sagt an und entfernt nichts |
 | `test/install.test.js` | `install_uninstallKeepsTheToken` | `--uninstall`: `disable --now`, Unit weg, Token bleibt |
 | `test/install.test.js` | `install_fixPathWritesTheDropInOnlyWhenNeeded` | `--fix-path` schreibt `path.conf` nur, wenn nötig; ohne Flag entsteht sie nicht |
 | `test/install.test.js` | `install_printsTheTokenOnce` | Token genau einmal auf stdout, nirgends sonst |
@@ -145,7 +146,10 @@ ohne ihn liest `grep` stdin und zählt immer `0`) — **und** dass er grün läu
 2. **Idempotent, Token unangetastet.** Zweiter Lauf: Tokendatei byte-gleich
    (`sha256`), Unit nicht neu geschrieben (`mtimeNs`), `openssl` genau einmal.
    Beweis: `install_withAnExistingToken_doesNotTouchIt`, `install_isIdempotent`.
-3. **`--dry-run` schreibt nichts.** Beweis: `install_dryRunWritesNothing`.
+3. **`--dry-run` schreibt nichts — auch nicht in den Modi, die löschen.**
+   Beweis: `install_dryRunWritesNothing`; `install_dryRunUninstallKeepsTheUnit`
+   (`--dry-run --uninstall` sagt an, die Unit bleibt, kein `systemctl`) — und
+   `--dry-run --print-token` sagt an, statt das Token auszugeben.
 4. **Vorprüfungen greifen vor dem ersten Schreibvorgang.** Fehlendes Node,
    falsche Version, belegter Port und ein Klon außerhalb `~/browser-control`
    enden mit Exit `1`, ohne Datei. Beweis: `install_withOldNode_abortsBeforeWriting`,
@@ -411,7 +415,9 @@ Dateien: `scripts/install.sh`, `test/install.test.js`.
 - `ensure_dropin()`: nur im Modus `fix-path`, nur wenn
   `dirname "$(command -v node)"` nicht `/usr/bin` ist; schreibt nur, wenn die
   Datei fehlt oder abweicht.
-- Fälle: `install_uninstallKeepsTheToken` (`disable --now` im Log, Unit weg,
+- Fälle: `install_dryRunUninstallKeepsTheUnit` (`--dry-run --uninstall`: Unit
+  bleibt, keine `systemctl`-Zeile im Log, Ausgabe sagt an, was passieren würde);
+  `install_uninstallKeepsTheToken` (`disable --now` im Log, Unit weg,
   Token mit gleichem `sha256` und Modus `600` da);
   `install_fixPathWritesTheDropInOnlyWhenNeeded` (mit `--fix-path` und
   Node-Stub außerhalb `/usr/bin`: `path.conf` mit `[Service]` und
@@ -421,7 +427,7 @@ Dateien: `scripts/install.sh`, `test/install.test.js`.
 Proof:
 
 ```
-node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 18
+node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 19
 node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_(uninstall|fixPath)'   # ⇒ 2
 ```
 
@@ -444,7 +450,7 @@ Dateien: `test/install.test.js` (`readTree()`, `sha256()`, `textFilesUnder()`);
 Proof:
 
 ```
-node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 20
+node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - install_'          # ⇒ 21
 grep -c 'sudo' scripts/install.sh; echo $?                                                       # ⇒ 0, Exit 1
 grep -cE '(>|>>)[[:space:]]*/(etc|usr|var|opt|srv|root)' scripts/install.sh; echo $?             # ⇒ 0, Exit 1
 ```
@@ -585,6 +591,15 @@ Handarbeit.
 
 ## Review
 
+### Code-Review Runde 2 — 2026-11-12: Bedingung erfüllt
+
+Der Code-Review fand einen **Muss**-Befund: `--dry-run --uninstall` löschte
+wirklich, weil `uninstall` vor dem Dry-Run-Zweig abgefertigt wurde. Behoben mit
+Fall `install_dryRunUninstallKeepsTheUnit` (Mutationsprobe rot); dazu B3–B5
+(unlesbare Tokendatei mit Exit `2`, `--uninstall` ohne Token, Trimmen nur an den
+Rändern wie die Bridge). Der Reviewer hatte festgehalten: „fix B1 …, dann
+`✅ Ship it`" — die Bedingung ist erfüllt und belegt.
+
 ### Runde 1 — 2026-11-12, `grizzled-senior-dev`: 🔧 (3 Blocker)
 
 Ziel und Kriterien hat der Betreiber am 2026-11-12 abgesprochen, der Dev-Plan
@@ -621,6 +636,14 @@ Minor, vier Nits — **alle übernommen**; die Einzelzeilen stehen in `## Log`.
   falsche Temp-`HOME`-Muster ist korrigiert; der `/usr/bin`-Zweig ist über
   `existsSync` verzweigt; `STATE_DIR` fällt; die Doku steht in §3; Meldung bei
   belegtem Port nennt `kill <pid>`.
+- **Code-Review Runde 1 — B1 übernommen (Muss):** `--dry-run --uninstall`
+  löschte die Unit, weil `uninstall` vor dem Dry-Run-Zweig abgefertigt wurde.
+  Jetzt sagt der trockene Lauf in **jedem** Modus an, was er täte; Fall
+  `install_dryRunUninstallKeepsTheUnit`, Kriterium 3 erweitert.
+- **Code-Review Runde 1 — B3 bis B5 übernommen:** unlesbare Tokendatei bekommt
+  eine deutsche Meldung mit dem `chmod 600`-Hinweis; `--uninstall` behauptet
+  nicht mehr, ein Token zu behalten, wenn keins da ist; das Token wird an den
+  Rändern getrimmt wie in der Bridge, nicht innen entkernt.
 - **Nits übernommen:** „die fünf Flags" statt „sechs Optionen"; „65 Bytes"
   einheitlich; Runde 1 mit Datum und Verdict; `loginctl enable-linger` bleibt
   außerhalb des Skripts (`## Non-goals`).
