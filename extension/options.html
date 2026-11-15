@@ -46,8 +46,8 @@
   <body>
     <h1>Browser Control</h1>
     <p class="hint">
-      Endpunkt der Bridge und dasselbe Token wie auf dem Server. Bleibt eines von
-      beiden leer, baut die Extension bewusst keine Verbindung auf.
+      Endpunkt der Bridge und dasselbe Token wie auf dem Server. Der Endpunkt ist
+      vorbelegt; ohne Token baut die Extension bewusst keine Verbindung auf.
     </p>
 
     <form id="settings-form">
@@ -58,8 +58,8 @@
         type="text"
         spellcheck="false"
         autocomplete="off"
-        placeholder="wss://example.com/browser-control/ws"
       />
+      <p class="hint">Die URL nur ändern, wenn die Bridge auf einem anderen Rechner läuft — dann die Adresse dort eintragen, für den öffentlichen Weg über Caddy die <code>wss://</code>-URL aus <code>INSTALL.md</code> §9.</p>
 
       <label for="token">Token</label>
       <input id="token" name="token" type="password" spellcheck="false" autocomplete="off" />

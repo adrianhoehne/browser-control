@@ -1,6 +1,6 @@
 ---
 description: Ein Standard-Endpunkt für die Extension — ist das Feld leer, verbindet sie nach ws://127.0.0.1:8110 (die Vorgabe der Bridge), sichtbar vorbelegt und änderbar; gespeicherte Endpunkte bleiben unberührt.
-status: proposed
+status: active
 ---
 
 # Der Standard-Endpunkt
@@ -324,6 +324,19 @@ Stand 2026-11-15, vor der Umsetzung:
   (2026-11-15).** Auf einem Einzelplatzrechner ist das vertretbar; wer Port
   8110 vor der Bridge belegt, bekommt ein gültiges Token. `wss://` (§9) oder
   Token-Rotation sind die Antworten, nicht dieses Inkrement.
+- **Der Endpunkt-Half der Leer-Prüfung ist toter Code (N1, 2026-11-15).**
+  Nach dem Fallback kann `settings.endpoint` nicht mehr `""` sein; die Spec
+  wollte die Zeile behalten. Beim nächsten Inkrement streichen — zusammen mit
+  dem Log-Text „Endpunkt oder Token fehlt", der nur noch den Token meint.
+- **Zwei Trimmen (N2, 2026-11-15).** `options.js` trimmt den gespeicherten
+  Endpunkt, `background.js` nicht: ein handgepflegter Wert aus Leerzeichen wird
+  im Feld als Standard gezeigt und beim Verbinden verworfen. Über die
+  Optionsseite nicht erreichbar (sie trimmt beim Speichern).
+- **`endpoint_withAStoredValue…` zählt die Sockets nicht (N3).** Eine doppelte
+  Wahl bliebe in diesem Fall grün; die Nachbartests prüfen
+  `FakeWebSocket.instances.length`.
+- **Der Hinweis in `options.html` bricht die Zeilenbreite (N4)** und klebt
+  optisch am Token-Label (Flex-`gap` nach oben und unten gleich).
 - **Ungemessen:** ob Firefox `ws://127.0.0.1:8110` aus einer
   `moz-extension://`-Seite unter allen Profil-Einstellungen erlaubt. Loopback
   gilt als vertrauenswürdig; gemessen wird es erst im Live-Lauf.
@@ -337,6 +350,15 @@ Stand 2026-11-15, vor der Umsetzung:
 sichtbar vorbelegt, nur bei leerem Feld.
 
 ## Review
+
+### Code-Review Runde 2 — 2026-11-15: `✅ Ship it`
+
+Kein Blocker, alle neun Kriterien mit Befehl belegt, sieben Mutationsproben rot
+(Standard entfernt, Port geändert, Optionsseite füllt immer, Fallback schreibt
+zurück, Fallback überschreibt). Vier Nachträge, alle als Lücke benannt:
+toter Endpunkt-Arm der Warnung (N1), zwei Trimmen (N2), fehlende
+`instances.length`-Zusicherung (N3), Formatierung des Hinweises (N4), zwei
+Doku-Stellen (N5).
 
 ### Runde 1 — 2026-11-15, `grizzled-senior-dev`: 🔧 (3 Blocker)
 

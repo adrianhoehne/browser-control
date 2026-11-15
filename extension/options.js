@@ -18,6 +18,10 @@
 (() => {
   const ENDPOINT_KEY = "endpoint";
   const TOKEN_KEY = "token";
+  // The value the background page dials when the field is empty (spec 36): shown here
+  // so what connects is readable before it connects. Same port as `DEFAULT_BIND` in
+  // `bridge/config.mjs`, and `test/extension.test.js` fails if the two drift apart.
+  const DEFAULT_ENDPOINT = "ws://127.0.0.1:8110";
   const ALLOW_PASSWORD_FIELDS = "allowPasswordFields";
   const ALLOW_EVAL = "allowEval";
   const ALLOW_SCREENSHOT = "allowScreenshot";
@@ -63,7 +67,12 @@
         ALLOW_EVAL,
         ALLOW_SCREENSHOT,
       ]);
-      document.getElementById("endpoint").value = asText(stored[ENDPOINT_KEY]).trim();
+      // An empty store is the local case: show the address the background page would
+      // dial. A stored value is shown as it is — a `wss://` endpoint behind Caddy is
+      // the operator's decision, not something to overwrite with a default.
+      const storedEndpoint = asText(stored[ENDPOINT_KEY]).trim();
+      document.getElementById("endpoint").value =
+        storedEndpoint === "" ? DEFAULT_ENDPOINT : storedEndpoint;
       document.getElementById("token").value = asText(stored[TOKEN_KEY]).trim();
       // Only the boolean `true` ticks the box: a `"true"` from a hand-edited
       // storage must not look like an unlocked password field.

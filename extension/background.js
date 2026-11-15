@@ -24,6 +24,12 @@
 
   const ENDPOINT_KEY = "endpoint";
   const TOKEN_KEY = "token";
+  // What a local install has to type: nothing but the token. The bridge listens on
+  // `DEFAULT_BIND` from `bridge/config.mjs` unless the operator says otherwise, and
+  // the options page pre-fills the same value for the same reason. Filling it here
+  // as well means an early `storage.local` without the key connects instead of
+  // staying silent (spec 36); a stored endpoint always wins, only `""` is replaced.
+  const DEFAULT_ENDPOINT = "ws://127.0.0.1:8110";
   // The agent tabs, most recently used last. A hint, never the truth: tab ids do
   // not survive a browser restart, so every caller checks the ids before it trusts
   // them.
@@ -580,6 +586,10 @@
       scheduleReconnect(reconnectAttempt + 1);
       return;
     }
+
+    // Not in `readSettings`: the endpoint that is dialled is the fallback, not a
+    // stored value, and nothing may write it back to the operator's settings.
+    if (settings.endpoint === "") settings.endpoint = DEFAULT_ENDPOINT;
 
     if (settings.endpoint === "" || settings.token === "") {
       if (!missingSettingsLogged) {

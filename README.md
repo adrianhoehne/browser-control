@@ -56,7 +56,8 @@ cd ~/browser-control
 ./scripts/install.sh
 
 # 2. extension: about:debugging#/runtime/this-firefox → "Load Temporary Add-on…"
-#    → pick extension/manifest.json, then set endpoint and token under Preferences.
+#    → pick extension/manifest.json, then paste the token under Preferences.
+#      The endpoint is pre-filled with ws://127.0.0.1:8110.
 ```
 
 `./scripts/install.sh --dry-run` shows what the first step would do without writing

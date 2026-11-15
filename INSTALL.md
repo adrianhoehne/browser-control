@@ -254,8 +254,11 @@ Then in Firefox:
    file.
 4. Right-click the icon → **“Manage Extension”** (or `about:addons` → Browser
    Control → Preferences).
-5. Enter the endpoint: `wss://example.com/browser-control/ws` (or
-   `ws://127.0.0.1:8110` if you skip Caddy and run everything on one machine).
+5. The **endpoint** field **is pre-filled with** `ws://127.0.0.1:8110` — the
+   address the bridge listens on unless you set `BC_BIND`. Leave it as it is
+   while bridge and Firefox run on the same machine; change it only when the
+   bridge runs on **another machine**, and then to the `wss://…` address from
+   section 9.
 6. Enter the token: the content of `~/.config/browser-control/token` from the
    server.
 7. **Save**, then **reload the extension once** in `about:debugging` — stored
@@ -386,7 +389,7 @@ token.
 |---|---|
 | `env: node: No such file` in the journal | `PATH` of the user unit — see the drop-in in section 3 |
 | `status windows=… tabs=0` | Firefox has no agent tab yet; `browser_navigate` creates one |
-| Nothing in the log, no `extension connected` | extension console (`about:debugging` → “Inspect”), not the page console. `bc: background page started`, `bc: endpoint invalid: …`, or nothing at all. Silence usually means: endpoint or token empty, or step 4.7 (the reload) was skipped |
+| Nothing in the log, no `extension connected` | extension console (`about:debugging` → “Inspect”), not the page console. `bc: background page started`, `bc: endpoint invalid: …`, or nothing at all. Silence usually means: the token is empty, or step 4.7 (the reload) was skipped |
 | `auth failed` in the bridge log | the token differs between file and extension options — section 2, “Rotating the token” |
 | `502` from a proxy | bridge not listening, or the upstream is `localhost` instead of `127.0.0.1` — section 9 |
 | Tools missing in the client | the service or the extension still runs the old code: restart it / reload the extension |

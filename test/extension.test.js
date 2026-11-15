@@ -14,14 +14,24 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
+import { loadConfig } from "../bridge/config.mjs";
+
 const PROTOCOL_SOURCE = await readFile(new URL("../extension/protocol.js", import.meta.url), "utf8");
 const BACKGROUND_SOURCE = await readFile(new URL("../extension/background.js", import.meta.url), "utf8");
+// The options page has no DOM harness (spec 36, `## Bekannte Lücken`), so its half of
+// the endpoint default is read as source text. Read once, at load: neither file changes
+// while the suite runs.
+const OPTIONS_SOURCE = await readFile(new URL("../extension/options.js", import.meta.url), "utf8");
 
 const ENDPOINT = "ws://127.0.0.1:8110";
+// An empty environment for `loadConfig`, the way `test/config.test.js` does it: without
+// it the bridge's defaults would be read from whatever the shell exports, and an
+// exported `BC_BIND` would compare the extension's default against a foreign address.
+const NO_ENV = {};
 // Not a usable token, and deliberately not a 32+-hex literal: the "no secrets in
 // the repo" rule greps for exactly that shape.
 const TOKEN = "token-from-the-options-page";
-const MANIFEST_VERSION = "0.2.0";
+const MANIFEST_VERSION = "0.3.0";
 const BROWSER_INFO = { name: "Firefox", version: "152.0.3" };
 
 const SOCKET_CONNECTING = 0;
@@ -2033,16 +2043,95 @@ test("startBackground_withEndpointButNoToken_shouldNotOpenConnection", async () 
   assert.deepStrictEqual(clock.pendingDelays(), []);
 });
 
-test("startBackground_withTokenButNoEndpoint_shouldNotOpenConnection", async () => {
-  // GIVEN a token without an endpoint,
-  const { clock } = await startBackground({ settings: { token: TOKEN } });
+test("endpoint_withoutAStoredValue_shouldDialTheLoopbackDefault", async () => {
+  // GIVEN a fresh install that has entered the token and nothing else,
+  const { browser, clock, consoleLines } = await startBackground({ settings: { token: TOKEN } });
 
   // WHEN the background page starts,
   await settleAsyncWork();
 
-  // THEN there is nowhere to dial, and no retry that could find one:
-  assert.equal(FakeWebSocket.instances.length, 0);
-  assert.deepStrictEqual(clock.pendingDelays(), []);
+  // THEN it dials the default endpoint instead of staying silent — the bridge on the
+  // same machine already listens there:
+  const socket = FakeWebSocket.latest();
+  assert.notEqual(socket, undefined, "the default endpoint must be dialled");
+  assert.equal(socket.url, ENDPOINT);
+  // No warning about missing settings: nothing is missing any more.
+  assert.equal(
+    consoleLines.filter((line) => line.startsWith("warn:")).length,
+    0,
+    "nothing is missing, so nothing may be reported as missing",
+  );
+  assert.deepStrictEqual(clock.pendingDelays(), [], "a socket in flight needs no retry");
+  // The fallback is not a stored value: the store still holds the token alone, so the
+  // operator's settings stay theirs (spec 36).
+  assert.deepStrictEqual(await browser.storage.local.get(["endpoint", "token"]), {
+    token: TOKEN,
+  });
+});
+
+/**
+ * The dial address of a background page that has only a token — the observed value, not
+ * a literal, because the two guards below compare against it.
+ */
+async function dialAddressWithoutAStoredEndpoint() {
+  await startBackground({ settings: { token: TOKEN } });
+  const socket = FakeWebSocket.latest();
+  assert.notEqual(socket, undefined, "the default endpoint must be dialled");
+  return socket.url;
+}
+
+test("endpoint_default_matchesTheBridgesDefaultPort", async () => {
+  // GIVEN a fresh install that has entered the token and nothing else,
+  const dialledAddress = await dialAddressWithoutAStoredEndpoint();
+
+  // WHEN we read the address the background page dialled and the one the bridge binds
+  // by default,
+  const dialled = new URL(dialledAddress);
+  const config = loadConfig(NO_ENV);
+
+  // THEN they have to be the same listener. This is the drift guard: changing one side
+  // alone leaves an extension that dials a port nobody listens on.
+  assert.equal(dialled.protocol, "ws:", "loopback is bare WebSocket; TLS is the Caddy path");
+  assert.equal(dialled.hostname, config.host);
+  assert.equal(dialled.port, String(config.port));
+});
+
+test("endpoint_default_isTheSameInOptionsAndBackground", async () => {
+  // GIVEN a fresh install that has entered the token and nothing else,
+  const dialledAddress = await dialAddressWithoutAStoredEndpoint();
+
+  // WHEN we read the constant the options page shows in its field,
+  const declared = OPTIONS_SOURCE.match(/const DEFAULT_ENDPOINT = "([^"]+)";/);
+
+  // THEN it has to be the address that is actually dialled. Compared with the observed
+  // `url`, never with the literal from this file: a guard against a literal would stay
+  // green with two broken files.
+  assert.notEqual(declared, null, "options.js must declare DEFAULT_ENDPOINT");
+  assert.equal(
+    declared[1],
+    dialledAddress,
+    "the options page would show a different endpoint than the one dialled",
+  );
+  // And only an empty field may become the default: a stored `wss://` address is the
+  // operator's value and has to be shown as it is. Read as source text, because the
+  // options page has no DOM harness.
+  assert.ok(
+    OPTIONS_SOURCE.includes('storedEndpoint === "" ? DEFAULT_ENDPOINT : storedEndpoint'),
+    "loadSettings must fill only an empty endpoint field",
+  );
+});
+
+test("endpoint_withAStoredValue_shouldDialThatValue", async () => {
+  // GIVEN an endpoint behind the reverse proxy and a token,
+  const storedEndpoint = "wss://bridge.example.test/browser-control/ws";
+  await startBackground({ settings: { endpoint: storedEndpoint, token: TOKEN } });
+
+  // WHEN the background page starts,
+  await settleAsyncWork();
+
+  // THEN the stored value is dialled. The default fills an empty field; it does not
+  // correct an operator who meant something else.
+  assert.equal(FakeWebSocket.latest()?.url, storedEndpoint);
 });
 
 test("connect_withUnparseableEndpoint_shouldReportOnceAndScheduleReconnect", async () => {
@@ -2073,6 +2162,13 @@ test("connect_withUnparseableEndpoint_shouldReportOnceAndScheduleReconnect", asy
   );
   assert.equal(FakeWebSocket.instances.length, 0, "nothing was dialled");
   assert.deepStrictEqual(clock.pendingDelays(), [1000], "a retry must be pending");
+  // A stored typo stays the failure of the day: the default endpoint replaced nothing,
+  // so it must not appear in the log as if it had been tried (spec 36).
+  assert.equal(
+    consoleLines.some((line) => line.includes(ENDPOINT)),
+    false,
+    "the standard endpoint must not be logged for a stored endpoint",
+  );
 });
 
 test("connect_withEndpointAndToken_shouldSendHelloWithProtocolOneAndToken", async () => {

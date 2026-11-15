@@ -118,8 +118,9 @@ Wiederaufbau in der Extension: nach jedem Close Exponentialbackoff,
 `welcome`. Ein **abgelehnter Endpunkt zählt wie ein Close**: `new WebSocket(...)`
 wirft bei einer Nicht-URL synchron, das darf den Wiederaufbau nicht abwürgen —
 also einmal ins Konsolen-Log der Extension (ohne Token) und derselbe Backoff.
-Ohne gespeicherten Endpunkt oder ohne Token wählt sich die Extension nicht raus
-und schreibt das einmal; dann gibt es bis zum nächsten Laden auch keinen Versuch.
+Ohne Token wählt sich die Extension nicht raus und schreibt das einmal; dann
+gibt es bis zum nächsten Laden auch keinen Versuch. Ein leerer Endpunkt ist
+`ws://127.0.0.1:8110` (`docs/36-standard-endpunkt.md`).
 
 ### Ergebnis von `status`
 
@@ -191,7 +192,7 @@ Extension, über die Optionsseite (`options_ui`), gespeichert in
 
 | Schlüssel | Default | Bedeutung |
 |---|---|---|
-| `endpoint` | (leer) | `wss://example.com/browser-control/ws`; leer = keine Verbindung |
+| `endpoint` | `ws://127.0.0.1:8110` | leer ⇒ Standard; gespeicherte Werte, auch `wss://…`, gewinnen (docs/36) |
 | `token` | (leer) | dasselbe Token wie auf dem Server, getrimmt gespeichert |
 
 Caddy auf dem Server — **ungeprüfter Vorschlag**, weil die Caddy-Konfiguration
@@ -262,7 +263,7 @@ test/*.test.js`; das Muster ist nötig, weil der Runner sonst auch
 | Datei / Fall | Was er beweist |
 |---|---|
 | `test/protocol.test.js` — `extension/protocol.js` in `node:vm` laden, gegen `bridge/protocol.mjs` vergleichen | Die beiden Kopien der Protokollkonstanten sind identisch |
-| `test/extension.test.js` — `protocol.js` und `background.js` in `node:vm` mit `browser`-Stub, Fake-`WebSocket` und Timer-Stub | Ohne Endpunkt/Token kein Verbindungsversuch, `hello` mit `protocol:1`, `welcome` ⇒ `status`, Container-Tab und privates Fenster fehlen, `url:""` ohne URL, Backoff 1000/2000/4000 ms, ungültiger Endpunkt ⇒ eine Konsolenzeile ohne Token und ein neuer Versuch |
+| `test/extension.test.js` — `protocol.js` und `background.js` in `node:vm` mit `browser`-Stub, Fake-`WebSocket` und Timer-Stub | Ohne Token kein Verbindungsversuch (ein leerer Endpunkt ist der Standard), `hello` mit `protocol:1`, `welcome` ⇒ `status`, Container-Tab und privates Fenster fehlen, `url:""` ohne URL, Backoff 1000/2000/4000 ms, ungültiger Endpunkt ⇒ eine Konsolenzeile ohne Token und ein neuer Versuch |
 | `test/websocket.test.js` — Handshake mit dem Beispielschlüssel aus RFC 6455 §1.3 (`dGhlIHNhbXBsZSBub25jZQ==` → `s3pPLMBiTxaQ9kYGzzhZRbK+xOo=`) | `Sec-WebSocket-Accept` ist korrekt gerechnet |
 | dito — fragmentierte Textnachricht (zwei Frames, `fin=0/1`) | Fragmente werden zusammengesetzt |
 | dito — Ping → Pong, Close → Close-Echo | Steuerframes werden beantwortet |
@@ -441,11 +442,12 @@ als Übergabe (Stufe 7).
    `cookieStoreId === "firefox-default"`, `url ?? ""`, `connectedAt` beim
    `welcome`), `onMessage()` (`welcome` → `status`-Antwort), Konsolenzeilen
    `bc: background page started` und einmalig die Meldung bei fehlendem
-   Endpunkt oder Token.
+   Token.
    Proof: `node --test test/extension.test.js` → `# fail 0`. Lokale Gegenprobe
    für die Extension-Hälfte ohne Browser: `protocol.js` und `background.js` per
    `vm.runInNewContext` mit `browser`-Stub, Fake-`WebSocket` und Timer-Stub;
-   geprüft werden „ohne Endpunkt/Token kein Verbindungsversuch", `hello` mit
+   geprüft werden „ohne Token kein Verbindungsversuch, ein leerer Endpunkt ist
+   der Standard", `hello` mit
    `protocol:1` und Token, `welcome` → `request status id 1`, fehlender
    Container-Tab, fehlendes privates Fenster, `url: ""` ohne URL und die
    Backoff-Folge 1000/2000/4000 ms und der abgelehnte Endpunkt (eine Zeile,
@@ -638,7 +640,7 @@ Stand 2026-10-23:
 - **Die Optionsseite wirkt erst beim nächsten Verbindungsaufbau** (2026-10-23):
   kein `storage.onChanged`-Neuaufbau, weil die Spec keinen verlangt. Nach dem
   Speichern von Endpunkt oder Token muss die Extension neu geladen werden —
-  Kriterium 5 sagt das jetzt. Fehlten beide Werte, plant `connect()` gar keinen
+  Kriterium 5 sagt das jetzt. Fehlte der Token, plante `connect()` gar keinen
   Versuch; ohne Reload passiert dann nichts.
 - **Debug-JSON trägt den Zeitstempel nur auf der ersten Zeile** (2026-10-23).
   Die Regel „alle Zeilen tragen einen ISO-Zeitstempel" gilt für die
@@ -796,8 +798,8 @@ Code-Review Runde 1 (Schritt 6, 2026-10-23) — Verdict `🔧`, zwei Blocker:
   `not a url` in `test/extension.test.js`, Gegenprobe ohne Absicherung
   → `# fail 1`.
 - **S2** (Kriterium 5 war so nicht erfüllbar: die Optionsseite wirkt erst beim
-  nächsten Verbindungsaufbau, und ohne gespeicherten Endpunkt plant `connect()`
-  gar keinen Versuch) — **übernommen, Spec-Seite**: Kriterium 5 und der
+  nächsten Verbindungsaufbau, und ohne Token plante `connect()` gar keinen
+  Versuch) — **übernommen, Spec-Seite**: Kriterium 5 und der
   Handprüfungsschritt verlangen jetzt einen Reload; kein `storage.onChanged` im
   Code, weil die Spec keins anfordert.
 - **Nits** — **teilweise übernommen**: Zeitstempel-Regel für das Debug-JSON, die

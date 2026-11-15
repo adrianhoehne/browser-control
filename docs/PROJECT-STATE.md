@@ -34,7 +34,7 @@ Spurweg, nicht im Mitschnitt): fehlender `defaultCaptionTrackIndex` (ein
 Track ⇒ Original; mehrere einer Sprache ⇒ manuell vor ASR), `>>`-Suffix am
 Menüeintrag, und der Paar-Eintrag in der Gegenprobe der Menüzahl.
 
-**Teststand:** 757 Tests grün, `npm run check` 0.
+**Teststand:** 760 Tests grün, `npm run check` 0.
 
 **Was bleibt (dokumentiert, nicht behoben):** das Etikett einer YouTube-Spur
 kann lügen (auf `wKv-g1uEoDY` ist die einzige Spur `ja` etikettiert und
@@ -362,7 +362,7 @@ sequenceDiagram
     participant CAD as Caddy (443, WS-Pfad)
     participant HUB as Hub (hub.mjs, Port 8110)
 
-    BG->>CAD: 1. WebSocket öffnen (Endpunkt aus storage.local)
+    BG->>CAD: 1. WebSocket öffnen (Endpunkt aus storage.local, leer ⇒ ws://127.0.0.1:8110)
     CAD->>HUB: Upgrade an 127.0.0.1:8110
     BG->>HUB: 2. hello (token, protocol, extensionVersion, browser)
     alt Token gültig

@@ -3,6 +3,20 @@
 Alle nennenswerten Änderungen. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.3.0] — 2026-11-15
+
+**Der Endpunkt muss nicht mehr getippt werden.** Läuft die Bridge auf derselben
+Maschine, ist das Feld in den Add-on-Einstellungen mit `ws://127.0.0.1:8110`
+vorbelegt — dem Port, den die Bridge per Default bindet. Es bleibt sichtbar und
+änderbar; ein gespeicherter Wert, etwa hinter Caddy, gewinnt unverändert.
+
+- Gilt nur für ein **leeres** Feld; nichts wird in `storage.local`
+  zurückgeschrieben.
+- Ein leerer **Token** verhindert die Verbindung weiterhin.
+- Ein Test wacht darüber, dass Optionsseite und Hintergrund denselben Wert
+  tragen **und** dass er zum `DEFAULT_BIND` der Bridge passt.
+- 760 Tests.
+
 ## [0.2.0] — 2026-11-15
 
 **Installation in einem Befehl.** `scripts/install.sh` legt das Token an,
