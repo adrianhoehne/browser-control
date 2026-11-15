@@ -17,8 +17,9 @@ kein mDNS, kein Caddy-Erraten. Der Standard ist eine **Vorgabe**, die man
 ## Ziel
 
 - **Ist der Endpunkt leer, ist er `ws://127.0.0.1:8110`.** Einmal als Konstante
-  benutzt, an zwei Stellen: die Optionsseite **zeigt** ihn, der Hintergrund
-  **verwendet** ihn. Anzeige und Verhalten dürfen nicht auseinanderlaufen —
+  je Datei benutzt: die Optionsseite **zeigt** ihn, der Hintergrund
+  **verwendet** ihn — und die Testdatei trägt die Adresse bereits als `ENDPOINT`
+  (10 Vorkommen des Namens); sie bleibt, wie sie ist. Anzeige und Verhalten dürfen nicht auseinanderlaufen —
   deshalb pinnt ein Test, dass beide Dateien denselben Wert tragen und dass er
   zum Port der Bridge passt.
 - **Sichtbar, nicht still.** Das Feld ist vorbelegt, nicht in letzter Sekunde
@@ -76,9 +77,9 @@ Aus den Dateien gelesen, nicht geschätzt:
 | `test/extension.test.js` | `endpoint_withoutAStoredValue_shouldDialTheLoopbackDefault` | leerer Endpunkt ⇒ das Hintergrundskript wählt `ws://127.0.0.1:8110` |
 | `test/extension.test.js` | `endpoint_withAStoredValue_shouldDialThatValue` | ein gespeicherter `wss://`-Endpunkt bleibt maßgeblich |
 | `test/extension.test.js` | `endpoint_default_matchesTheBridgesDefaultPort` | der Standardendpunkt trägt denselben Port wie `DEFAULT_BIND` in `bridge/config.mjs` (Drift-Wächter: die zwei Dateien dürfen nicht auseinanderlaufen) |
-| `test/extension.test.js` | `endpoint_default_isTheSameInOptionsAndBackground` | die Optionsseite zeigt und der Hintergrund benutzt **denselben** Wert |
-| `test/extension.test.js` | `endpoint_withAnInvalidDefault_shouldStillLogTheInvalidEndpoint` | ein gespeicherter Unsinn bleibt der Fehlerfall von heute, nicht still |
-| `npm test` | `# fail 0`, `# cancelled 0`, `# skipped 0` | nichts ist kaputt |
+| `test/extension.test.js` | `endpoint_default_isTheSameInOptionsAndBackground` | der **Quelltext** der Optionsseite trägt denselben Wert wie der beobachtete Dial des Hintergrunds (kein DOM-Test, siehe `## Bekannte Lücken`) |
+| `test/extension.test.js` | `connect_withUnparseableEndpoint_shouldReportOnceAndScheduleReconnect` (erweitert) | ein gespeicherter Unsinn bleibt der Fehlerfall von heute — und der Standard hat ihn nicht übernommen |
+| `npm test` (Projektlauf) | `# fail 0`, `# cancelled 0`, `# skipped 0` | nichts ist kaputt |
 
 ## Acceptance criteria
 
@@ -88,22 +89,27 @@ Aus den Dateien gelesen, nicht geschätzt:
    ⇒ **1**; dieselbe Zeile für `extension/options.js` ⇒ **1**; dazu
    `grep -Fc 'ws://127.0.0.1:8110' extension/background.js` ⇒ **1** (die Adresse
    wird in der Datei nicht wiederholt — auch nicht in einem Kommentar, sonst
-   zählt der Beweis zwei Zeilen und wäre falsch-rot).
+   zählt der Beweis zwei Zeilen und wäre falsch-rot). Die Zeile wird **wörtlich**
+   gepinnt, einschließlich doppelter Anführungszeichen und eines Leerzeichens um
+   `=`; wer sie umformatiert, zieht den Beweis mit.
 2. **Der Port ist der der Bridge.** Beweis: der Fall
    `endpoint_default_matchesTheBridgesDefaultPort` liest `DEFAULT_BIND` aus
    `bridge/config.mjs` und vergleicht ihn mit der Dial-Adresse des
    Hintergrunds; grün gezählt:
    `node --test --test-reporter=tap --test-name-pattern='^endpoint_default_matchesTheBridgesDefaultPort$' test/extension.test.js | grep -cE '^ok [0-9]+ - endpoint_default_matchesTheBridgesDefaultPort'`
    ⇒ **1**. Ändert jemand `DEFAULT_BIND` **oder** die Konstante, wird der Fall rot.
-3. **Ein leerer Endpunkt verbindet, statt zu schweigen — fünf Fälle, jeder
+3. **Ein leerer Endpunkt verbindet, statt zu schweigen — vier Fälle, jeder
    grün.** Beweis:
-   `node --test --test-reporter=tap --test-name-pattern='^endpoint_' test/extension.test.js | grep -cE '^ok [0-9]+ - endpoint_(withoutAStoredValue_shouldDialTheLoopbackDefault|withAStoredValue_shouldDialThatValue|default_matchesTheBridgesDefaultPort|default_isTheSameInOptionsAndBackground|withAnInvalidDefault_shouldStillLogTheInvalidEndpoint)'`
-   ⇒ **5**.
+   `node --test --test-reporter=tap --test-name-pattern='^endpoint_' test/extension.test.js | grep -cE '^ok [0-9]+ - endpoint_(withoutAStoredValue_shouldDialTheLoopbackDefault|withAStoredValue_shouldDialThatValue|default_matchesTheBridgesDefaultPort|default_isTheSameInOptionsAndBackground)'`
+   ⇒ **4**. Der Fehlerfall mit gespeichertem Unsinn wird **nicht** dupliziert:
+   die eine neue Zusicherung („keine Konsolenzeile enthält den Standard") kommt
+   in den bestehenden Fall `connect_withUnparseableEndpoint_shouldReportOnceAndScheduleReconnect`.
 4. **Gespeicherte Werte gewinnen.** Beweis: `endpoint_withAStoredValue_shouldDialThatValue`
-   fährt einen `wss://`-Endpunkt und beobachtet ihn als Dial-Adresse; der
-   Bestandsfall mit gespeichertem Endpunkt bleibt grün:
-   `grep -cE '^test\("connect_withEndpointAndToken_shouldSendHelloWithProtocolOneAndToken'
-   test/extension.test.js` ⇒ **1** und seine `ok`-Zeile ⇒ **1**.
+   fährt einen `wss://`-Endpunkt und beobachtet ihn als Dial-Adresse (grüne
+   `ok`-Zeile ⇒ **1**). **Wächter, heute schon grün:** der Bestandsfall mit
+   gespeichertem Endpunkt bleibt:
+   `node --test --test-reporter=tap --test-name-pattern='^connect_withEndpointAndToken_shouldSendHelloWithProtocolOneAndToken$' test/extension.test.js | grep -cE '^ok [0-9]+ - connect_withEndpointAndToken_shouldSendHelloWithProtocolOneAndToken'`
+   ⇒ **1**.
 5. **Anzeige und Verhalten sind derselbe Wert — und nur ein leeres Feld wird
    gefüllt.** Beweis: `endpoint_default_isTheSameInOptionsAndBackground` liest
    die Konstante aus `options.js` und vergleicht sie mit der beobachteten
@@ -114,19 +120,26 @@ Aus den Dateien gelesen, nicht geschätzt:
    Feld, dass die URL nur für eine Bridge auf einem anderen Rechner geändert
    wird, und der Platzhalter zeigt keine konkrete Fremdadresse mehr. Beweis:
    `grep -c 'example.com' extension/options.html` ⇒ **0** (Exit 1);
-   `grep -ciE 'anderer Rechner|another machine' extension/options.html` ⇒ **≥ 1**;
-   dazu `INSTALL.md`:
-   `sed -n '/^## 4\./,/^## 5\./p' INSTALL.md | grep -Fc 'ws://127.0.0.1:8110'`
-   ⇒ **1**; `… | grep -ciE 'another machine|other machine'` ⇒ **≥ 1**;
+   `grep -ciE 'andere[mnr]?[[:space:]]+Rechner' extension/options.html` ⇒ **≥ 1**
+   (die Beugung ist offen; `grep -c` zählt Zeilen, und der Hinweis bricht um);
+   dazu `INSTALL.md`, mit **demselben** Schnitt wie im Plan:
+   `sed -n '/^## 4\. Browser/,/^## 5\./p' INSTALL.md | grep -Fc 'is pre-filled with'`
+   ⇒ **1** (der längere Anker, weil die Adresse in §4 schon steht — ein
+   `grep -Fc 'ws://127.0.0.1:8110'` wäre heute schon 1 und nach einer *richtigen*
+   Ergänzung 2); `… | grep -ciE 'another machine|other machine'` ⇒ **≥ 1**;
    `grep -Fc 'endpoint or token empty' INSTALL.md` ⇒ **0** (Exit 1).
-7. **Kein neues Feld, keine neue Berechtigung, kein Werkzeug.** Beweis:
+7. **Kein neues Feld, keine neue Berechtigung, kein Werkzeug. Wächter, heute
+   schon grün** — er entscheidet nichts über dieses Inkrement, er hält es
+   klein. Beweis:
    `git diff HEAD -- extension/manifest.json` ⇒ **leer**;
    `grep -c 'TOOL_COUNT = 13' test/http-mcp.test.js` ⇒ **1**; `npm test` grün.
-8. **Kein Produktcode außerhalb der Grenze.** Beweis:
-   `git status --porcelain` ⇒ nur `extension/background.js`,
+8. **Kein Produktcode außerhalb der Grenze.** Beweis — **vor dem Commit**, denn
+   nach dem Commit ist der Baum leer und die Prüfung vakuum-grün:
+   `git diff --stat HEAD` nennt genau `extension/background.js`,
    `extension/options.js`, `extension/options.html`, `test/extension.test.js`,
-   `INSTALL.md`, `docs/…`; `git diff HEAD -- bridge/` ⇒ **leer** (die Bridge
-   wird nur **gelesen**, nicht geändert).
+   `INSTALL.md`, `docs/…` und **keine** ungetrackte Datei;
+   `git diff HEAD -- bridge/` ⇒ **leer** (die Bridge wird nur **gelesen**, nicht
+   geändert).
 9. **Kein Geheimnis.** Beweis:
    `git grep --untracked -nE '[0-9a-f]{32,}' -- .` ⇒ keine Ausgabe, Exit 1.
 
@@ -198,24 +211,34 @@ grep -c 'anderer Rechner' extension/options.html        # ⇒ 1
 ```
 
 **4. Unsinn bleibt ein Fehler — und der Gesamtlauf.** (Umsetzer)
-Fall `endpoint_withAnInvalidDefault_shouldStillLogTheInvalidEndpoint`: GIVEN
-`{ endpoint: "not a url", token: TOKEN }`, THEN genau eine Zeile
-`bc: Endpunkt ungültig:`, `FakeWebSocket.instances.length === 0`,
-`clock.pendingDelays()` ⇒ `[1000]`, und **keine** Konsolenzeile enthält
-`ws://127.0.0.1:8110` — der Standard hat den Tippfehler nicht übernommen. Fall
+Der bestehende Fall `connect_withUnparseableEndpoint_shouldReportOnceAndScheduleReconnect`
+bekommt **eine** Zusicherung dazu: keine Konsolenzeile enthält
+`ws://127.0.0.1:8110` — der Standard hat einen gespeicherten Tippfehler nicht
+übernommen. Kein fünfter `endpoint_`-Fall: die übrigen Zusicherungen (eine
+`bc: Endpunkt ungültig:`-Zeile, `instances.length === 0`, `pendingDelays()` ⇒
+`[1000]`) hält dieser Fall bereits. Dazu der Fall
 `endpoint_withAStoredValue_shouldDialThatValue`: `{ endpoint:
 "wss://bridge.example.test/browser-control/ws", token: TOKEN }` ⇒ die
 Dial-Adresse ist genau dieser Wert.
 
 Proof:
 ```
-node --test --test-reporter=tap --test-name-pattern='^endpoint_' test/extension.test.js | grep -cE '^ok [0-9]+ - endpoint_(withoutAStoredValue_shouldDialTheLoopbackDefault|withAStoredValue_shouldDialThatValue|default_matchesTheBridgesDefaultPort|default_isTheSameInOptionsAndBackground|withAnInvalidDefault_shouldStillLogTheInvalidEndpoint)'   # ⇒ 5
+node --test --test-reporter=tap --test-name-pattern='^endpoint_' test/extension.test.js | grep -cE '^ok [0-9]+ - endpoint_(withoutAStoredValue_shouldDialTheLoopbackDefault|withAStoredValue_shouldDialThatValue|default_matchesTheBridgesDefaultPort|default_isTheSameInOptionsAndBackground)'   # ⇒ 4
 npm test; echo $?    # ⇒ 0, "# fail 0", "# cancelled 0", "# skipped 0"
 npm run check; echo $?   # ⇒ 0
 ```
 
+**1a. Die Amendments ausführen.** (Umsetzer, Teil von Stufe 1)
+`docs/01-skelett-verbindung-und-status.md`: die drei in `## Amendments to
+previous spec docs` genannten Stellen (Ziel-Absatz, `## Configuration`-Zeile
+zum `endpoint`, die drei „ohne Endpunkt/Token"-Stellen) werden auf „ohne
+**Token** kein Versuch; ohne Endpunkt der Standard" gezogen. Proof:
+`grep -c 'ohne Endpunkt' docs/01-skelett-verbindung-und-status.md; echo $?`
+⇒ **0, Exit 1**; `grep -ciE 'ohne Token' docs/01-skelett-verbindung-und-status.md`
+⇒ **≥ 1**.
+
 **5. `INSTALL.md` (englisch).** (Umsetzer)
-§4 Schritt 5: das Feld ist mit `ws://127.0.0.1:8110` vorbelegt und wird nur
+§4 Schritt 5: das Feld **is pre-filled with** `ws://127.0.0.1:8110` und wird nur
 geändert, wenn die Bridge auf einem **anderen** Rechner läuft; der Caddy-Verweis
 in §9 bleibt. In §8 die Zeile „endpoint or token empty" auf den Token verkürzen —
 ein leeres Feld schweigt nach dieser Änderung nicht mehr.
@@ -238,10 +261,13 @@ grep -Fc 'endpoint or token empty' INSTALL.md; echo $?   # ⇒ 0, Exit 1
   Kriterium 1 eine **2** — formal richtig, aber falsch-rot. Kommentare nennen
   `DEFAULT_ENDPOINT` und `DEFAULT_BIND`.
 - **`loadConfig()` ohne Argument** liest `process.env` — `NO_ENV = {}` benutzen.
-- **`ENDPOINT` in der Testdatei umbenennen:** die Testdatei trägt die Adresse
-  bereits als `ENDPOINT` (rund 40 Verwendungen). Wer sie „aufräumend" zu
-  `DEFAULT_ENDPOINT` macht, lässt den Wächter die Testdatei mit sich selbst
-  vergleichen — ein grüner Beweis ohne Aussage.
+- **Der Options-Wächter kann sich selbst bestätigen.** Er vergleicht die
+  Konstante aus `options.js` mit der **beobachteten** Dial-Adresse des
+  Hintergrunds (`FakeWebSocket.latest().url`) — nicht mit einem Literal aus der
+  Testdatei. Wer ihn gegen `"ws://127.0.0.1:8110"` aus dem Test schreibt, hat
+  einen grünen Beweis, der auch bei zwei kaputten Dateien grün bleibt. Die
+  Testdatei trägt die Adresse als `ENDPOINT` (10 Vorkommen); sie bleibt wie sie
+  ist und ist **nicht** die Vergleichsquelle.
 - **Der einzige Optionsbeweis ist Text.** Es gibt keinen DOM-Harness für
   `options.js`; die Regel „nur wenn nichts gespeichert ist" hängt an einem
   Muster auf dem Quelltext. Ein Umformatieren macht den Fall rot, obwohl das
@@ -260,17 +286,41 @@ unabhängig, nennt aber denselben Wert.
 ### What the next increment inherits
 
 - **Die Warnung „missing settings"** sagt weiter „Endpunkt oder Token fehlt",
-  obwohl nur noch der Token fehlen kann — eine offene Lüge im Log.
+  obwohl nur noch der Token fehlen kann — eine offene Lüge im Log. **Warum
+  nicht hier:** die Zeile ist in `docs/01` dokumentiert (`active`) und von
+  keinem Test gepinnt; sie zu ändern zieht eine weitere Amendments-Zeile nach
+  sich. Eine Zeile Arbeit, eine Entscheidung des Betreibers.
 - **Kein DOM-Harness für `options.js`**; der ehrliche Test („leere Ablage ⇒ Feld
   zeigt den Standard") braucht einen `document`-Stub — eigene Spec.
 - **`docs/PROJECT-STATE.md`** beschreibt den Endpunkt weiter als Handarbeit;
   Stufe 6 zieht nur Spec-Status und Registry nach.
 - **Anderer Port, andere Maschine** bleiben Handarbeit (§9) — keine Discovery.
 
+## Amendments to previous spec docs
+
+Diese Spec löst **eine Zusage** von `docs/01-skelett-verbindung-und-status.md`
+(`active`) ab — die Spec sagt heute das Gegenteil.
+
+| Datei | Stelle | alt | neu |
+|---|---|---|---|
+| `docs/01-…` | `## Ziel`, Zeile ~121 | „Ohne gespeicherten Endpunkt oder ohne Token wählt sich die Extension nicht raus und schreibt das einmal" | „Ohne **Token** wählt sie sich nicht raus und schreibt das einmal; ein leerer Endpunkt ist `ws://127.0.0.1:8110` (`docs/36`)" |
+| `docs/01-…` | `## Configuration`, Zeile ~194 | `endpoint \| (leer) \| wss://example.com/…; leer = keine Verbindung` | `endpoint \| ws://127.0.0.1:8110 \| leer ⇒ Standard; gespeicherte Werte, auch wss://…, gewinnen (docs/36)` |
+| `docs/01-…` | `## Testing` (~265), Dev-Plan-Proof (~448), `## Log` S2 (~799) | „ohne Endpunkt/Token kein Verbindungsversuch" | „ohne **Token** kein Verbindungsversuch; ohne Endpunkt der Standard" |
+
+`docs/01` bleibt `active`; die Zeilen werden in **Stufe 1** mitgezogen (die
+Stufe, die das Verhalten ändert, `docs/README.md`).
+
 ## Bekannte Lücken
 
 Stand 2026-11-15, vor der Umsetzung:
 
+- **Die Optionsseite ist nur per Textmuster geprüft (2026-11-15).** Es gibt
+  keinen DOM-Harness; der Fall vergleicht Quelltext, nicht gerendertes Feld. Der
+  ehrliche Test bräuchte einen `document`-Stub — eigene Spec.
+- **`ws://` ist unverschlüsselt, und das Token geht im `hello` mit
+  (2026-11-15).** Auf einem Einzelplatzrechner ist das vertretbar; wer Port
+  8110 vor der Bridge belegt, bekommt ein gültiges Token. `wss://` (§9) oder
+  Token-Rotation sind die Antworten, nicht dieses Inkrement.
 - **Ungemessen:** ob Firefox `ws://127.0.0.1:8110` aus einer
   `moz-extension://`-Seite unter allen Profil-Einstellungen erlaubt. Loopback
   gilt als vertrauenswürdig; gemessen wird es erst im Live-Lauf.
@@ -285,11 +335,36 @@ sichtbar vorbelegt, nur bei leerem Feld.
 
 ## Review
 
-### Runde 1 — steht aus
+### Runde 1 — 2026-11-15, `grizzled-senior-dev`: 🔧 (3 Blocker)
 
-Die Spec geht durch das Gate, sobald Ziel und Kriterien abgesprochen sind.
+Ziel und Kriterien hat der Betreiber am 2026-11-15 abgesprochen, der Dev-Plan
+lag vor. Drei Blocker, acht Major, eine Sicherheits-Lücke, vier Nits — **alle
+übernommen** (`## Log`).
 
 ## Log
 
 - **2026-11-15, Betreiberentscheid:** Standard-Endpunkt `ws://127.0.0.1:8110`,
   sichtbar vorbelegt; gespeicherte Werte bleiben unberührt.
+- **Runde 1 — B1 übernommen:** `docs/01` (`active`) sagt das Gegenteil; ein
+  Abschnitt `## Amendments to previous spec docs` benennt die drei Stellen, und
+  **Stufe 1** zieht sie mit (die Stufe, die das Verhalten ändert).
+- **Runde 1 — B2 übernommen:** der `INSTALL.md`-Beweis pinnt jetzt den längeren
+  Anker `is pre-filled with`; die Adresse steht dort schon, ein `grep` darauf
+  wäre vorher wie nachher 1 und nach einer Ergänzung 2.
+- **Runde 1 — B3 übernommen:** der Hinweistext wird mit
+  `andere[mnr]?[[:space:]]+Rechner` geprüft (Beugung und Zeilenumbruch), nicht
+  mit dem Nominativ.
+- **Runde 1 — M1 bis M8 übernommen:** Wächter als Wächter gekennzeichnet
+  (Kriterien 4, 7, 9); der `ok`-Befehl in Kriterium 4 ausgeschrieben; Kriterium 8
+  vor dem Commit mit `git diff --stat HEAD`; der fünfte Fall fällt weg (die neue
+  Zusicherung wohnt im Bestandsfall, Zählung **4**); die `ENDPOINT`-Falle richtig
+  beschrieben (Vergleich gegen den beobachteten Dial, nicht gegen ein Literal);
+  „10 Vorkommen" und die dritte Kopie in der Testdatei benannt; die Optionsseite
+  in der Lückeliste als textgeprüft markiert; die Log-Lüge mit Begründung
+  vertagt.
+- **Runde 1 — S1 übernommen:** `ws://` und das Token im `hello` als Lücke
+  benannt; `wss://` und Token-Rotation sind die Antworten, nicht dieses
+  Inkrement.
+- **Runde 1 — Nits übernommen:** Formatierung der gepinnten Zeile erwähnt; die
+  `npm test`-Zeile als Projektlauf gekennzeichnet; `## Review` trägt jetzt Runde
+  1 mit Datum und Verdict.
