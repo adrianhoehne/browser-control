@@ -613,9 +613,13 @@ test(
     assert.match(failureLine, new RegExp(`listener failed on 127\\.0\\.0\\.1:${port}: EADDRINUSE$`));
 
     // ... and, on a second line, who owns the port: this test process.
+    // The name comes from `/proc/<pid>/comm` and therefore from the runtime, not
+    // from the bridge: Node 22 writes `node`, Node 24 writes `MainThread` for
+    // this same process. So it is asserted as present, not as a fixed string —
+    // pinning it would only make the suite a Node version detector.
     const ownerLine = findLine(handle.output.stderr, / in use, owner pid=/);
     assert.ok(ownerLine, `no owner line:\n${handle.output.stderr}`);
-    assert.match(ownerLine, new RegExp(`port 127\\.0\\.0\\.1:${port} in use, owner pid=${process.pid} name=node$`));
+    assert.match(ownerLine, new RegExp(`port 127\\.0\\.0\\.1:${port} in use, owner pid=${process.pid} name=\\S+$`));
   },
 );
 
@@ -658,10 +662,12 @@ test(
     assert.ok(failureLine, `no HTTP failure line:\n${handle.output.stderr}`);
     assert.match(failureLine, new RegExp(`http listener failed on 127\\.0\\.0\\.1:${httpPort}: EADDRINUSE$`));
 
-    // ... and, second line, who owns the port: this test process.
+    // ... and, second line, who owns the port: this test process. The name is
+    // `node` on Node 22 and `MainThread` on Node 24 (`/proc/<pid>/comm`), so it
+    // is only required to be non-empty — address and PID are what matters.
     const ownerLine = findLine(handle.output.stderr, / in use, owner pid=/);
     assert.ok(ownerLine, `no owner line:\n${handle.output.stderr}`);
-    assert.match(ownerLine, new RegExp(`port 127\\.0\\.0\\.1:${httpPort} in use, owner pid=${process.pid} name=node$`));
+    assert.match(ownerLine, new RegExp(`port 127\\.0\\.0\\.1:${httpPort} in use, owner pid=${process.pid} name=\\S+$`));
 
     // ... and no `/mcp` endpoint was ever announced: the exit is the honest
     // answer, not a bridge that looks healthy while never answering `/mcp`:
