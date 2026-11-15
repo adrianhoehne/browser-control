@@ -35,8 +35,13 @@ test("findPortOwner_withOwnListeningSocket_shouldNameThisProcess", { skip: SKIP_
   try {
     const owner = findPortOwner({ host: "127.0.0.1", port });
 
-    // THEN the answer is this process, named by its `comm` entry:
-    assert.deepEqual(owner, { pid: process.pid, name: "node" });
+    // THEN the answer is this process. The PID is the contract; the name is
+    // whatever `/proc/<pid>/comm` says, and that differs by runtime: Node 22
+    // writes "node", Node 24 writes "MainThread" — same process either way.
+    // Pinning the name would test the Node build, not this module, so only
+    // its shape is asserted.
+    assert.equal(owner.pid, process.pid);
+    assert.match(owner.name, /^\S+$/);
   } finally {
     await closeServer(server);
   }
