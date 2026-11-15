@@ -3,6 +3,29 @@
 Alle nennenswerten Änderungen. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.2.0] — 2026-11-15
+
+**Installation in einem Befehl.** `scripts/install.sh` legt das Token an,
+installiert die systemd-User-Unit, aktiviert und startet den Dienst und prüft
+ihn — dann sagt es, was in Firefox noch zu tun ist.
+
+- **Idempotent:** ein zweiter Lauf ändert nichts, was stimmt; ein vorhandenes
+  Token wird nie überschrieben.
+- **Das Token erscheint genau einmal**, auf dem Terminal — nicht in einer
+  zweiten Datei, nicht im Journal.
+- **Kein `sudo`**, geschrieben wird nur nach `~/.config/browser-control/` und
+  `~/.config/systemd/user/`; jeder Schreibvorgang läuft durch einen
+  Pfadwächter.
+- **Vorprüfungen vor dem ersten Schreibvorgang:** Node ≥ 22, Klonpfad,
+  beschreibbares `$HOME`, freie Ports (mit Besitzer).
+- Optionen: `--dry-run`, `--print-token`, `--fix-path`, `--uninstall`,
+  `--help`; Exit `0`/`1`/`2` wie die Bridge.
+- **21 neue Tests** (`test/install.test.js`) mit temporärem `HOME` und Stubs —
+  nichts am echten System. Insgesamt 757 Tests.
+
+**Doku:** `README.md` und `INSTALL.md` sind englisch (Specs bleiben deutsch);
+`CONTRIBUTING.md` ersetzt `AGENTS.md` und beschreibt denselben Ablauf.
+
 ## [0.1.0] — 2026-11-12
 
 Erste Fassung, aus 34 Specs gebaut (`docs/`).
