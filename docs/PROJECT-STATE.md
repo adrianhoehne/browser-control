@@ -36,6 +36,12 @@ Menüeintrag, und der Paar-Eintrag in der Gegenprobe der Menüzahl.
 
 **Teststand:** 760 Tests grün, `npm run check` 0.
 
+**Seit 2026-11-15 veröffentlicht:** `v0.1.0` (erste Quellenmarke), `v0.2.0`
+(`scripts/install.sh`), `v0.3.0` (Standard-Endpunkt), `v0.4.0`.
+Die Specs 35 und 36 sind `active`; `docs/28` ist die einzige Spec, deren
+Code fertig ist, die aber noch `proposed` steht (Amendments und
+Live-Messung fehlen).
+
 **Sprache der Optionsseite (2026-11-15):** die sichtbaren Texte der
 Erweiterungs-Einstellungen sind **englisch** (Betreiberentscheid, das Projekt ist
 öffentlich). Werkzeugfehler und Logzeilen bleiben deutsch.

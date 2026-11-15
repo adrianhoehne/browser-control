@@ -4,7 +4,7 @@ Was als Nächstes kommt, in der Reihenfolge, in der es gebaut werden soll. Kein
 Spec-Ersatz: jede Zeile wird beim Bauen zu `docs/NN-….md` mit Ziel, Kriterien
 und Dev-Plan. Diese Datei sagt nur, *was* und *warum jetzt*.
 
-Stand 2026-10-27, nach Inkrement 19 (`docs/19-browser-eval.md`).
+Stand 2026-11-15, nach Spec 36 (`docs/36-standard-endpunkt.md`).
 **Reihenfolge-Regel des Betreibers: Funktionalität zuerst, Sicherheit und
 Betrieb ganz ans Ende.** Und keine Zeile ist „groß": was groß wäre, ist hier in
 mittlere und kleine Schritte geteilt, damit jedes Inkrement in einem Zug durch
@@ -41,7 +41,17 @@ werden nicht neu vergeben.
 | `21-screenshot-teil-2.md` | 12 | `browser_screenshot` (Teil 2) — Bild als MCP-`image`-Block, Grenzen 3 MiB / 5 MiB / 20 s |
 | `22-read-ausschnitte.md` | 13 | `browser_read` mit `offset`/`maxChars` — Blättern durch lange Artikel |
 | `23-artikel-extraktion.md` | 14 | `browser_read` mit `mode: article` — Artikelkörper statt ganzer Seite |
+| `24-frames.md` | 15 | `browser_frames` — iframes auflisten, mit `frame` adressieren |
+| `25-frame-handeln.md` | 15 | Handeln im Frame: `read`/`inspect` über `frame` |
+| `26-frame-click-type.md` | 15 | `click` und `type` im Frame |
+| `27-shadow-dom.md` | 16 | offene Schattenbäume durchdringen (`>>>`) |
+| `28-log-hygiene.md` | 18 | Debug-Block per Whitelist — **Code fertig, Spec noch `proposed`** (Amendments und Live-Messung offen) |
 | `29-windows-betrieb.md` | 29 | `npm run check` ohne Shell-Werkzeuge — `scripts/check.mjs` prüft 28 Dateien, `checked 28 files` |
+| `31-youtube-recherche.md` | 17 | Recherche: das Transkript ist lesbar, Werkzeug entschieden |
+| `32-transkript-werkzeug.md` | 17 | `browser_transcript` (Teil 1) — Segmente mit Zeitstempeln |
+| `33-spurwahl.md`, `34-spurendatei-beobachten.md` | 17 | Teil 2: die Originalspur, über eine mitgeschnittene `timedtext`-Datei |
+| `35-installationsskript.md` | — (Betrieb) | `scripts/install.sh` — Token, Unit, Dienst, Prüfung in einem Befehl |
+| `36-standard-endpunkt.md` | 31 (Teil) | Standard-Endpunkt `ws://127.0.0.1:8110`, sichtbar vorbelegt |
 
 Gestrichen, mit Datum und Grund in der jeweiligen Zeile: **21** (Token-Rotation,
 Handarbeit statt Code — Anleitung in `INSTALL.md`, `### Token wechseln`) und
@@ -54,15 +64,19 @@ Handarbeit statt Code — Anleitung in `INSTALL.md`, `### Token wechseln`) und
 | Drei Restlöcher im `navigate`-Pfad schließen oder dauerhaft als Lücke führen: `onUpdated` prüft die Adresse nicht, `complete: false` nennt die vorherige Seite, eine Weiterleitung auf die alte Adresse endet in `complete: false` (`docs/04`, `## Bekannte Lücken`) | klein |
 | Für `click` fehlt weiter ein Live-Beleg der Ruhe-Erkennung — fünf Versuche fielen auf den Rückfall (`docs/15`, `## Bekannte Lücken`) | klein |
 | **Windows-Installationsanleitung fehlt.** Sie existiert bisher nur als Entwurf im Gespräch; `INSTALL.md` hat keinen Windows-Abschnitt (der einzige Treffer auf „windows" ist die Logzeile `status windows=<n>`). Gehört zu Spec 30, Stufe 5 — nicht vorgezogen, weil `docs/README.md` verlangt, daß keine Spec Verhalten beschreibt, das es noch nicht gibt | klein |
+| **`docs/36`, Nachträge N1–N4** (Code-Review 2026-11-15): der Endpunkt-Arm der Leer-Prüfung in `background.js` ist nach dem Fallback toter Code, und der Log-Text „Endpunkt oder Token fehlt" nennt einen Grund, den es nicht mehr gibt; `options.js` trimmt den gespeicherten Endpunkt, `background.js` nicht; `endpoint_withAStoredValue…` prüft `FakeWebSocket.instances.length` nicht; der Hinweis in `options.html` bricht die Zeilenbreite und klebt am Token-Label | klein |
+| **`docs/35`, drei ungemessene Pfade** (`## Bekannte Lücken`): ein echter systemd-Lauf auf einer fremden Distribution, der `/usr/bin`-Zweig von `--fix-path`, der `is-active`-Fehlschlag. Alle drei sind implementiert, aber nur per Stub geprüft | klein |
+| **`docs/28` abschließen** — die Spec ist `proposed`, der Code fertig: Amendments, Doku-Verweise und die Live-Messung fehlen | klein |
+| **`test/mcp.test.js` aufteilen** nach Werkzeugfamilien — 63–95 s bei 90 s Frist (`CONTRIBUTING.md`, `## Acceptance`); mit jeder Werkzeug-Stufe wird es enger | mittel |
+| **Doku-Drift aus `docs/36` N5**: `README.md` und `PROJECT-STATE.md` beschrieben den Endpunkt als Handarbeit — in 0.4.0 nachgezogen, die Zeile bleibt als Erinnerung, dass solche Stellen beim Abschluss mitgesucht werden | winzig |
 | **Spec 29, vier Nachzieher aus dem Code-Review** (2026-11-06, nicht blockierend, bewußt nicht mehr angefaßt weil `docs/29` `active` ist und ein Zurückstellen auf `proposed` mehr kostet als der Wert): (a) die Laufzeiten in `docs/29` und `PROJECT-STATE.md` sind ~20 % zu hoch — frisch gemessen 2,3–2,7 s statt 3,0–3,2 s; (b) `## Touch boundary` in `docs/29` nennt `docs/30-prozess-und-konsole.md` nicht; (c) für die Code-Review-Befunde B1, C9, C10 steht keine Zeile im `## Log` von `docs/29`; (d) `DIAGNOSIS_PATTERNS` in `scripts/check.mjs:37` hat ein zweites Muster (`/\bError\b/`), das beim Syntaxfehler nie greift | winzig |
 
 ## Funktionalität
 
-| # | Vorhaben | Warum jetzt | Größe |
-|---|---|---|---|
-| 15 | **Frames** — Lesen und Klicken im Hauptrahmen *und* in iframes | Heute nur `frameId: 0`; Formulare und Widgets sitzen oft im Frame | mittel |
-| 16 | **Shadow DOM** — Elemente in offenen Schattenbäumen finden | Moderne Seiten kapseln ihre Komponenten; `querySelector` sieht dort nichts | mittel |
-| 17 | **YouTube-Videos schauen/lernen** — Transkript lesen, Videoinhalt erschließen, Zusammenfassungen | Zwei Gründe für die letzte Zeile: Video ist kein Text (Transkript, Untertitel, Zeitbezüge sind ein eigener Zuschnitt), und es hängt an fast allem darüber (Klick, Ruhe, besserer Text). Ein Ziel, kein nächster Schritt. **Recherchiert und entschieden am 2026-11-11** (`docs/31-youtube-recherche.md`, `active`): das Transkript ist heute schon lesbar, M1–M10 belegen das. Entschieden: **neues Werkzeug `browser_transcript`**, Originalsprache, Text + Zeitbezug, sprachunabhängiger Anker; die Zusammenfassung macht das Modell des Agenten. **Die Folge-Spec liegt in zwei Teilen vor**: `docs/32-transkript-werkzeug.md` (**`active`** — Lesen, das dreizehnte Werkzeug, Segmente mit Zeitstempeln, `offset`/`maxChars`) und `docs/33-spurwahl.md` (Spurwahl — Originalspur über den Original-Audiotrack, bei nicht-englischem und nicht-deutschem Original die englische Spur, sonst das Original mit genannter Sprache). Die Teilung geschah am 2026-11-12 nach dem **dritten Block** des Spec-Gates (`CONTRIBUTING.md`, Schritt 4). **Am 2026-11-12 neu geschnitten, gebaut und live abgenommen:** das Panel folgt der Spur nicht (live gemessen), das Werkzeug liest seither die signierte `api/timedtext`-Spurendatei, deren Adresse die Extension selbst mitschneidet (`webRequest`, `docs/34`). Beide Live-Kriterien grün (englisches und japanisches Video), 736 Tests. **Teil 2 ist damit `active`;** offen bleiben Kapitel, Bild, andere Hosts und das Etikett-Problem. Kapitel und Bild sind bewusst offen. | mittel |
+**Diese Tabelle ist leer.** Die drei Zeilen 15 (Frames), 16 (Shadow DOM) und
+17 (YouTube) sind gebaut und abgenommen — die Specs stehen unter „Gemacht",
+die Begründungen in `docs/24`–`27` und `docs/31`–`34`. Offen bleiben nur
+Sicherheit und Betrieb (unten) und die Nachträge (oben).
 
 ## Sicherheit und Betrieb (zuletzt)
 
@@ -76,7 +90,7 @@ Handarbeit statt Code — Anleitung in `INSTALL.md`, `### Token wechseln`) und
 | 27 | **MV3-Migration, Teil 2** — Manifest auf MV3, Test aus Spec 02 bewusst umstellen | Teilstück zwei, setzt 26 voraus | klein |
 | 28 | **MV3-Migration, Teil 3** — Messung: hält die Verbindung im Tab wirklich? | Teilstück drei; ohne Messung ist der Umzug eine Behauptung | klein |
 | 30 | **Windows-Betrieb, Teil 1b** — der Prozess und die Konsole | Setzt 29 voraus. Der Betreiber will pi, die Bridge und Firefox auf **einem** Windows-Rechner, und der Prozess soll aus einer **Konsole** startbar sein, nicht nur als Dienst: dafür müssen `SIGBREAK` dazukommen, das MCP-stdio im Terminal schweigen und die Amendments an `docs/18` nachgezogen werden. Spec: `docs/30-prozess-und-konsole.md` | mittel |
-| 31 | **Windows-Betrieb, Teil 2** — den Dienst **optional** einrichten, dazu der Endpunkt fürs lokale Firefox | Task Scheduler oder NSSM als Alternative zur Konsole (die der Normalfall bleibt), dazu die Frage `ws://127.0.0.1:8110` gegen `wss://` über einen lokalen Caddy. Noch keine Spec; die Endpunkt-Frage ist eine Sicherheitsentscheidung des Betreibers | mittel |
+| 31 | **Windows-Betrieb, Teil 2** — den Dienst **optional** einrichten, dazu der Endpunkt fürs lokale Firefox | Task Scheduler oder NSSM als Alternative zur Konsole (die der Normalfall bleibt), dazu die Frage `ws://127.0.0.1:8110` gegen `wss://` über einen lokalen Caddy — **der lokale Standard ist seit `docs/36` entschieden** (`ws://127.0.0.1:8110`, sichtbar vorbelegt); offen bleibt nur der Dienst auf Windows | mittel |
 
 **Geteilt am 2026-11-06.** Die Zeilen 29 und 30 waren eine Spec. Das Spec-Review-Gate
 hat sie dreimal blockiert (`docs/30-prozess-und-konsole.md`, `## Review`: L1–L6, M1–M5, N1/N2); nach `CONTRIBUTING.md`, Schritt 4, ist

@@ -1,6 +1,6 @@
 ---
 description: Ein Installationsskript für die Server-Seite — Token, systemd-Unit, Dienststart und Prüfung in einem Befehl, idempotent, ohne Firefox-Automatisierung; die vier Schritte in der Extension bleiben Handarbeit.
-status: proposed
+status: active
 ---
 
 # Das Installationsskript
@@ -17,6 +17,10 @@ vier Schritte bleiben Handarbeit — das Skript bereitet sie vor und sagt, was
 fehlt.
 
 ## Ziel
+
+**Stand 2026-11-15: gebaut, abgenommen und in `v0.2.0` veröffentlicht** — 21
+Tests, fünf Mutationsproben, Code-Review `✅` nach einem Muss-Befund. Es fehlen
+nur die drei Pfade, die ein Stub nicht erreicht (`## Bekannte Lücken`).
 
 - **Ein Befehl** auf dem Server: `./scripts/install.sh` legt das Token an,
   installiert die systemd-User-Unit, aktiviert und startet den Dienst und prüft
