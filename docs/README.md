@@ -127,6 +127,7 @@ gibt** — das ist bei ihr erlaubt und sonst nicht. Die erste ist
 | `34-spurendatei-beobachten.md` | Teil 2b von `browser_transcript`: die signierte `api/timedtext`-Adresse nicht aus `performance` lesen (live blind, `docs/33`, M18), sondern selbst mitschneiden — `webRequest`-Berechtigung, aufgenommen je Tab (gedeckelt), gelesen nur der Agenten-Tab, nur youtube.com, Adresse bleibt in der Extension. **`active`:** beide Live-Kriterien am 2026-11-12 grün | `active` |
 | `35-installationsskript.md` | Ein Installationsskript für die Server-Seite: Token, systemd-Unit, Dienststart und Prüfung in einem Befehl — idempotent, ohne Firefox-Automatisierung, ohne `sudo`; die vier Schritte in der Extension bleiben Handarbeit | `active` |
 | `36-standard-endpunkt.md` | Ein Standard-Endpunkt für die Extension: ein leeres Feld verbindet nach `ws://127.0.0.1:8110` (die Vorgabe der Bridge), sichtbar vorbelegt und änderbar; gespeicherte Endpunkte bleiben unberührt, keine Discovery. **`active`** seit 2026-11-15 | `active` |
+| `37-rust-bridge.md` | Die Bridge als Rust-Binary — dasselbe Protokoll zu beiden Seiten, dieselbe MCP-Oberfläche und dieselben Logzeilen, Linux und Windows x86_64; parallel aufgebaut, Ablösung des Node-Wegs erst nach gemessener Parität | `proposed` |
 
 Meta-Datei dieses Ordners (`README.md`) trägt bewusst kein Frontmatter: sie ist
 Verfahren, keine Spec.
