@@ -75,6 +75,7 @@ There are **no dependencies** — Node ≥ 22 is enough:
 ```bash
 npm test        # 757 cases, TAP output, ~95 s
 npm run check   # node --check over every .js/.mjs
+./scripts/package.sh   # builds dist/browser-control-<version>.xpi (unsigned)
 ```
 
 How changes happen (spec → gate → dev plan → review → acceptance) is described
@@ -84,7 +85,9 @@ decisions that followed.
 
 ## Known limits
 
-- **Unsigned**: temporary load, again after every Firefox restart.
+- **Unsigned**: temporary load, again after every Firefox restart. An unsigned
+  XPI (`./scripts/package.sh`) keeps it installed only in Developer Edition,
+  Nightly or ESR with the signature check switched off — see `INSTALL.md` §4.
 - **Windows** is only partly covered (`docs/29`, `docs/30`).
 - **YouTube labels can lie**: `browser_transcript` reads the track YouTube calls
   the original; language detection is deliberately out of scope.

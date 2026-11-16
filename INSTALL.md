@@ -282,6 +282,31 @@ cd ~/browser-control && git pull
 … then **Reload** in `about:debugging`. A changed manifest needs no second step;
 the new permission appears in `about:addons`.
 
+### Build an XPI and keep the add-on across restarts
+
+A temporary add-on is gone after a Firefox restart. An **XPI** survives that —
+but release Firefox installs only **signed** XPIs, and this one is unsigned. It
+therefore works in the builds where the signature check can be switched off
+(Developer Edition, Nightly, ESR).
+
+```bash
+./scripts/package.sh              # writes dist/browser-control-<version>.xpi
+./scripts/package.sh --out-dir ~/xpi   # or somewhere else
+```
+
+The script needs nothing but `zip`. It reads the version from
+`extension/manifest.json`, puts `manifest.json` at the archive's **root**, keeps
+dotfiles out, and refuses to write an archive Firefox would reject.
+
+1. In Developer Edition, Nightly or ESR: `about:config` →
+   `xpinstall.signatures.required` = `false`.
+2. `about:addons` → gear → **Install Add-on From File…** → pick the XPI.
+3. Restart Firefox: the add-on is still there, and so are endpoint and token.
+
+**Release Firefox has no such switch.** A permanent install there needs a
+signature from AMO (`web-ext sign --channel=unlisted`), and the add-on has to be
+MV3 first — see `docs/ROADMAP.md`, rows 23, 24 and 26–28.
+
 ## 5. Check it end to end
 
 **1. The seam, in the bridge log:**
