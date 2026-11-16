@@ -158,6 +158,10 @@ Richtigkeit.
 
 **Stufe 0 — Werkzeugkette** (Betreiber, mit `sudo`)
 
+`scripts/install-toolchain.sh` erledigt genau das (idempotent; verweigert den
+Start unter `sudo`, weil rustup in `$HOME` gehört und nur der Linker Root
+braucht).
+
 Gemessen am 2026-11-16: `cargo`, `rustup` und `x86_64-w64-mingw32-gcc` fehlen.
 `rustup` installieren, `rustup target add x86_64-unknown-linux-musl
 x86_64-pc-windows-gnu`, Mingw-Cross-Linker (`gcc-mingw-w64-x86-64`), dazu
