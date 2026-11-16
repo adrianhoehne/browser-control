@@ -72,9 +72,10 @@ Frame-Codec — genau die Stelle, an der eine Bibliothek Arbeit spart oder
 Bytes verschluckt. Damit ist die Frage aus einer früheren Runde entschieden
 statt offen.
 
-**Versionen:** die exakten Versionen stehen im **eingecheckten `Cargo.lock`**,
-eingefroren in Stufe 0; die Tabelle nennt Crates, Zweck und Lizenz. Ein
-`cargo update` ist ein eigener Commit mit eigenem Parity-Lauf.
+**Versionen:** die exakten Versionen stehen im **eingecheckten `Cargo.lock`**.
+Er entsteht mit der ersten Stufe, die eine Abhängigkeit einführt (2a), und wird
+ab dort mitgepflegt; ein `cargo update` ist ein eigener Commit mit eigenem
+Parity-Lauf. Die Tabelle nennt bis dahin Crates, Zweck und Lizenz.
 
 ## Die Entscheidungen des Betreibers (2026-11-16)
 
@@ -181,13 +182,15 @@ WebSocket-Client, der die Antworten aus Fixtures liefert) und vergleicht:
 1. **Die Rust-Bridge spricht dasselbe Protokoll.** Beweis:
    `cargo test --manifest-path bridge-rs/Cargo.toml` ⇒ 0;
    `bash scripts/parity.sh --impl node --check` ⇒ **7/7 gegen die eingefrorenen
-   Artefakte** (der Maßstab beschreibt den heutigen Code);
+   Artefakte** (der Maßstab beschreibt den heutigen Code; nach Stufe 4b
+   entfällt diese Hälfte, weil es die Node-Bridge nicht mehr gibt);
    `bash scripts/parity.sh --impl rust --check` ⇒ **7/7** (die Parität);
    `bash scripts/parity.sh --self-test` ⇒ **7/7 Gegenproben rot** — je Vergleich
    eine Mutation. „Identisch" ohne Soll-Artefakt und ohne Selbsttest beweist
    nichts.
 2. **Ein Binary, zwei Plattformen.** Beweis:
-   `cargo build --release --manifest-path bridge-rs/Cargo.toml` ⇒ 0, und
+   `cargo build --release --manifest-path bridge-rs/Cargo.toml --target
+   x86_64-unknown-linux-musl` ⇒ 0, und
    `find bridge-rs/target/x86_64-unknown-linux-musl/release -maxdepth 1 -type f
    -executable | wc -l` ⇒ **1** (nicht `ls` zählen: `cargo` legt `.d`-Dateien
    daneben); `cargo build --release --manifest-path bridge-rs/Cargo.toml
@@ -219,9 +222,11 @@ WebSocket-Client, der die Antworten aus Fixtures liefert) und vergleicht:
    `grep -c 'ExecStart=%h/.local/bin/browser-control-bridge --http' deploy/browser-control.service`
    ⇒ **1**; das Binary lauscht wirklich — `BC_BIND=127.0.0.1:18140
    BC_HTTP_PORT=18141 ./browser-control-bridge --http &` und dann
-   `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18141/mcp` ⇒ `401`
-   (Ports des Parity-Laufs, nicht die der Testsuite; `8110`/`8111` sind
-   Konfigurationsaussage, kein Messwert). Paritätsvergleich 5 und 6 grün.
+   `curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:18141/mcp`
+   ⇒ `401` — **mit `-X POST`**, weil die Reihenfolge Pfad → Methode → Token
+   lautet und ein `GET` in den `405`-Zweig läuft (Ports des Parity-Laufs, nicht
+   die der Testsuite; `8110`/`8111` sind Konfigurationsaussage, kein Messwert).
+   Paritätsvergleich 5 und 6 grün.
 8. **Windows hat einen Startweg.** Beweis:
    `grep -c 'browser-control-bridge.exe' INSTALL.md` ⇒ **≥ 1**;
    `grep -c 'browser-control-bridge.xml' INSTALL.md docs/30-prozess-und-konsole.md`
@@ -305,7 +310,7 @@ Fixture-Peer"), `src/main.rs` ohne Verhalten.
 Proof:
 ```
 rustup target list --installed | grep -cE 'x86_64-(unknown-linux-musl|pc-windows-gnu)'   # ⇒ 2
-cargo build --release --manifest-path bridge-rs/Cargo.toml; echo $?                       # ⇒ 0
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl; echo $?   # ⇒ 0
 find bridge-rs/target/x86_64-unknown-linux-musl/release -maxdepth 1 -type f -executable | wc -l   # ⇒ 1
 file -b bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge         # ⇒ "… statically linked"
 cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-pc-windows-gnu; echo $?  # ⇒ 0
@@ -334,20 +339,30 @@ Die sieben Vergleiche:
 | 7 | 3 | Logzeilenfolge ohne Zeitstempel: `BC_LOG=info`, `debug`, `debug --http` |
 
 Jedes Paar läuft **nacheinander auf demselben Port, mit derselben Tokendatei und
-demselben Fixture-Env**; Artefakte nach `mktemp -d` (nie in den Baum).
-`--impl node,rust|node,node`, `--only 5,6`, `--keep`, `--self-test`.
-`--self-test` fährt drei **Mutationsproben** und wird nur grün, wenn der
-Vergleich „≠" meldet.
+demselben Fixture-Env**. Die **Soll-Artefakte** entstehen in dieser Stufe und
+werden **eingecheckt** (`scripts/parity/expected/<nr>-<fall>.txt`) — sie sind der
+Maßstab, gegen den ab Stufe 2a gemessen wird. Laufzeit-Artefakte (Logs,
+Zwischendateien) gehen nach `mktemp -d`, nie in den Baum.
+
+Optionen: `--record` (Artefakte schreiben, nur mit `--impl node`),
+`--check` (gegen die Artefakte messen), `--impl node|rust|node,node`,
+`--only 5,6`, `--keep`, `--self-test` (mutiert **je Vergleich eines** der sieben
+Soll-Artefakte und muss **7/7** Unterschiede melden).
 
 Proof:
 ```
-bash -n scripts/parity.sh; echo $?                       # ⇒ 0
-bash scripts/parity.sh --impl node,node                  # ⇒ "1..7 identisch", 0
-bash scripts/parity.sh --self-test; echo $?              # ⇒ "Gegenproben rot: 3/3", 0
-npm run check                                            # ⇒ 0
+bash -n scripts/parity.sh; echo $?                          # ⇒ 0
+bash scripts/parity.sh --impl node --record                 # ⇒ 7 Vergleiche aufgezeichnet, 7 Dateien
+git status --porcelain scripts/parity/expected | wc -l       # ⇒ 7 (eingecheckt, nicht weggeworfen)
+bash scripts/parity.sh --impl node --check                  # ⇒ "7/7 wie erwartet", 0
+bash scripts/parity.sh --impl node,node                     # ⇒ "1..7 identisch", 0 (Determinismus)
+bash scripts/parity.sh --self-test; echo $?                 # ⇒ "Gegenproben rot: 7/7", 0
+npm run check                                               # ⇒ 0
 ```
-`node,node` grün beweist **Determinismus**, nicht Parität — deshalb ist
-`--self-test` in dieser Stufe Pflicht.
+`node,node` grün beweist **Determinismus**; `--check` gegen die eingecheckten
+Artefakte beweist, dass der Maßstab den heutigen Code beschreibt. Beides ist
+Pflicht, und `--self-test` mit **7** Proben ist der Beweis, dass der Vergleich
+überhaupt hinsieht.
 
 **Stufe 2a — `protocol`, `config`, `log`, `platform/linux`, Startverhalten**
 
@@ -368,7 +383,7 @@ Proof:
 ```
 cargo test --manifest-path bridge-rs/Cargo.toml --test protocol --test config --test platform
 # ⇒ protocol_constants_matchTheExtension, loadConfig_* (3), findPortOwner_* (2) ok
-bash scripts/parity.sh --impl node,rust --only 5,6       # ⇒ 2/7 identisch
+bash scripts/parity.sh --impl rust --check --only 5,6    # ⇒ 2/7 wie erwartet
 ```
 
 **Stufe 2b — `ws`: Handshake, Codec, Close**
@@ -379,8 +394,9 @@ Entscheidung: **keine WebSocket-Bibliothek**, `bridge/websocket.mjs` wird von
 Hand portiert. Gründe: die Close-Codes `4401/4408/4409` und `1002/1003/1009`
 sind der Vertrag; die Grenze muss **vor** dem Puffern feuern; Bytes, die mit dem
 Handshake ankommen (`head`), sind ein eigener Fall; und die reinen Codec-Fälle
-übertragen sich nur dann 1:1. Zusätzliche Abhängigkeiten nur `sha1` und
-`base64` (Accept-Key).
+übertragen sich nur dann 1:1. Zusätzlich zu den in `## Dependency changes`
+genannten Crates braucht diese Stufe nur `sha1` und `base64` (Accept-Key) —
+tokio und serde kommen erst mit 2a/2d.
 
 Proof:
 ```
@@ -412,7 +428,7 @@ Mitzuportieren: `BRIDGE_VERSION = "0.1.0"` im `welcome`,
 Proof:
 ```
 cargo test --manifest-path bridge-rs/Cargo.toml --test hub 2>&1 | grep -cE '^test (hub|formatStatusLine|debugBlockOf|verifyToken)_[A-Za-z0-9]+ \.\.\. ok'   # ⇒ 55
-bash scripts/parity.sh --impl node,rust --only 4         # ⇒ 1/7
+bash scripts/parity.sh --impl rust --check --only 4      # ⇒ 1/7 wie erwartet
 ```
 
 **Stufe 2d — `mcp`-Werkzeugschicht und stdio**
@@ -473,7 +489,7 @@ Klartext), Exit `0` auf SIGTERM, Fehler **nach** dem Binden ⇒ Exit `1`.
 Proof:
 ```
 cargo test --manifest-path bridge-rs/Cargo.toml 2>&1 | tail -1   # ⇒ "test result: ok. N passed; 0 failed"
-bash scripts/parity.sh; echo $?                                  # ⇒ "1..7 identisch", 0
+bash scripts/parity.sh --impl rust --check; echo $?               # ⇒ "7/7 wie erwartet", 0 (Node-Seite gibt es nicht mehr)
 ```
 
 **Stufe 3 — Windows**
@@ -514,14 +530,16 @@ zuerst" und Exit `1` ab; `guard_path` bekommt `$HOME/.local/bin` als dritten
 erlaubten Ort, und der Ablehnungsfall
 `install_guardPathRejectsAPathOutsideTheAllowedSet` wird **erweitert**, nicht
 aufgeweicht; `--fix-path` entfällt, `--uninstall` räumt eine alte Drop-in-Datei
-weiter ab), `test/deploy.test.js`, `test/install.test.js` mit zwei neuen Fällen:
-`install_copiesTheBinaryToLocalBin` und
-`install_withMissingBinary_abortsBeforeWriting`.
+weiter ab), `test/deploy.test.js`, `test/install.test.js` mit zwei neuen Fällen
+(`install_copiesTheBinaryToLocalBin`, `install_withMissingBinary_abortsBeforeWriting`)
+und der Anpassung der Sandbox: sie legt heute `home/browser-control/bridge/bridge.mjs`
+an (Zeilen 97, 108, 307) — danach genügt `home/browser-control/`, sonst findet der
+4b-Grep noch `bridge/` in der Testsuite.
 
 Warum vor 4b und getrennt: `bridge/` lebt noch, `npm test` bleibt mit beiden
-Bäumen grün, und der Unit-/Installer-Wechsel ist für sich reviewbar. `docs/18`
-und `docs/35` bleiben in dieser Stufe **unangetastet** — Kriterium 6 verlangt
-das ausdrücklich.
+Bäumen grün, und der Unit-/Installer-Wechsel ist für sich reviewbar. `docs/35` wird in dieser Stufe **mitgezogen** (sie beschreibt `install.sh`, und
+`docs/README.md` verlangt den Nachtrag in der Stufe, die das Verhalten ändert);
+`docs/18` bleibt bis 4b unangetastet — Kriterium 6 verlangt das.
 
 Proof:
 ```
@@ -547,7 +565,8 @@ und behält es für Tests), `CONTRIBUTING.md` (`## Acceptance` bekommt
 
 Proof:
 ```
-git log --oneline -- bridge/ | wc -l                       # ⇒ genau der eine Commit dieser Stufe
+test -d bridge && echo present || echo gone                 # ⇒ "gone" (vorher: present)
+git log --diff-filter=D --oneline -- bridge/ | wc -l        # ⇒ 1 (der Lösch-Commit; ohne --diff-filter zählt der Anlage-Commit mit)
 npm test 2>&1 | grep -E '^# (tests|fail|cancelled|skipped)'  # ⇒ fail/cancelled = 0
 cargo test --manifest-path bridge-rs/Cargo.toml 2>&1 | tail -1
 bash scripts/parity.sh; echo $?                            # ⇒ 7/7, 0
@@ -612,9 +631,10 @@ nicht Bridge-Verhalten.
   „zeichengenau" bricht.
 - **stdin-EOF unter systemd** — ohne die `fstat`/`GetFileType`-Prüfung startet
   der Dienst im Sekundentakt neu.
-- **`hyper` und die Bytes nach dem Handshake** — ob `hyper::upgrade::on` die
-  bereits gelesenen Restbytes liefert, entscheidet ein Test; sonst bekommt der
-  Extension-Listener einen handgeschriebenen Kopfleser.
+- **Die Bytes nach dem Handshake** — der Extension-Port hat einen eigenen
+  Kopfleser (`## Dependency changes`); die Falle ist, dass er die bereits
+  gelesenen Restbytes an den Frame-Codec weiterreichen muss, sonst geht ein
+  `hello`, das im selben Paket kommt, verloren.
 - **Die Fixture ist geteilt** — sie wird in Stufe 1 nicht angefasst; `ws-probe.mjs`
   deckt, was sie nicht kann.
 - **`npm test` wird in 4b kleiner** — das muss im Commit und in
@@ -638,7 +658,8 @@ Auftrag für einen Implementer.
   4a. Keine Stufe wartet auf eine spätere.
 - Unberührt bis 4b: `bridge/**`, `extension/**`, `test/fixtures/fake-extension.mjs`,
   `package.json`. Unberührt bis 4a: `docs/18`, `deploy/browser-control.service`,
-  `scripts/install.sh`; unberührt bis 4b: `docs/18`, `docs/35`.
+  `scripts/install.sh`; `docs/35` wird in 4a nachgezogen; unberührt bis 4b:
+  `docs/18`.
 
 ### What the next increment inherits
 
