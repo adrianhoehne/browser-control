@@ -1,0 +1,17 @@
+# One `tools/call` per tool, with the arguments its schema wants and nothing else.
+# The same file is used twice: once with a fixture that answers `ok:true` (the
+# success case) and once with one that answers `ok:false` (the error case). The
+# ids are the case position, so a missing answer is visible as a gap.
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"browser_status"}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"browser_navigate","arguments":{"url":"https://example.org/"}}}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"browser_read"}}
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"browser_click","arguments":{"selector":"a#video-title-link"}}}
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"browser_type","arguments":{"selector":"input#q","text":"Zeile eins","submit":true}}}
+{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"browser_focus"}}
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"browser_inspect","arguments":{"selector":"a#cart-link"}}}
+{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"browser_open_tab","arguments":{"url":"https://example.org/"}}}
+{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"browser_close_tab"}}
+{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"browser_eval","arguments":{"code":"return document.title"}}}
+{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"browser_screenshot"}}
+{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"browser_frames"}}
+{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"browser_transcript"}}

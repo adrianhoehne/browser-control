@@ -1,0 +1,5 @@
+# The strongest tool call there is: no arguments, no page, no tab — so the only
+# thing that can answer is the hub. Used twice in comparison 3: once with nobody
+# connected (`ExtensionUnavailable`) and once with a peer that stays silent after
+# `welcome` (`ExtensionTimeout`).
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"browser_status"}}

@@ -1,0 +1,103 @@
+# cases=3
+# case=1
+listening on 127.0.0.1:18115 log=info
+extension connected peer=127.0.0.1 protocol=1
+status windows=2 tabs=3
+received SIGTERM, shutting down
+# case=2
+listening on 127.0.0.1:18115 log=debug
+extension connected peer=127.0.0.1 protocol=1
+status windows=2 tabs=3
+{
+  "extension": {
+    "version": "0.1.0",
+    "connectedAt": "2026-10-23T09:12:31.004Z"
+  },
+  "windows": [
+    {
+      "id": 1,
+      "focused": true,
+      "type": "normal",
+      "tabs": [
+        {
+          "id": 101,
+          "active": true,
+          "pinned": false,
+          "url": "https://example.org/",
+          "title": "Beispiel"
+        },
+        {
+          "id": 102,
+          "active": false,
+          "pinned": true,
+          "url": "https://example.com/",
+          "title": "Example Domain"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "focused": false,
+      "type": "normal",
+      "tabs": [
+        {
+          "id": 201,
+          "active": true,
+          "pinned": false,
+          "url": "",
+          "title": "Neuer Tab"
+        }
+      ]
+    }
+  ]
+}
+received SIGTERM, shutting down
+# case=3
+listening on 127.0.0.1:18115 log=debug
+listening on 127.0.0.1:18116 for POST /mcp
+extension connected peer=127.0.0.1 protocol=1
+status windows=2 tabs=3
+{
+  "extension": {
+    "version": "0.1.0",
+    "connectedAt": "2026-10-23T09:12:31.004Z"
+  },
+  "windows": [
+    {
+      "id": 1,
+      "focused": true,
+      "type": "normal",
+      "tabs": [
+        {
+          "id": 101,
+          "active": true,
+          "pinned": false,
+          "url": "https://example.org/",
+          "title": "Beispiel"
+        },
+        {
+          "id": 102,
+          "active": false,
+          "pinned": true,
+          "url": "https://example.com/",
+          "title": "Example Domain"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "focused": false,
+      "type": "normal",
+      "tabs": [
+        {
+          "id": 201,
+          "active": true,
+          "pinned": false,
+          "url": "",
+          "title": "Neuer Tab"
+        }
+      ]
+    }
+  ]
+}
+received SIGTERM, shutting down

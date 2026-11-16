@@ -1,0 +1,4 @@
+# cases=1
+# case=1
+token file missing or too short: <run>/missing/token
+exit=2

@@ -28,3 +28,11 @@ export const MCP_FIXTURE = Object.freeze({ extension: 18112 });
 
 /** Both listeners of `test/http-mcp.test.js`. */
 export const HTTP_MCP = Object.freeze({ extension: 18113, http: 18114 });
+
+/**
+ * Both listeners of `scripts/parity.sh` — the parity run spawns the bridge instead
+ * of the test runner doing it, and `http` is only bound by the `--http` log case.
+ * Reserved here for the same reason as every other entry: two runs on one number is
+ * the collision this table exists to prevent.
+ */
+export const PARITY = Object.freeze({ extension: 18115, http: 18116 });

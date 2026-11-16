@@ -1,0 +1,5 @@
+# cases=1
+# case=1
+listener failed on 127.0.0.1:18115: EADDRINUSE
+port 127.0.0.1:18115 in use, owner pid=<pid> name=<name>
+exit=1

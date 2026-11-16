@@ -1,0 +1,79 @@
+# cases=39
+# case=1
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\n  \"extension\": {\n    \"version\": \"0.1.0\",\n    \"connectedAt\": \"2026-10-23T09:12:31.004Z\"\n  },\n  \"windows\": [\n    {\n      \"id\": 1,\n      \"focused\": true,\n      \"type\": \"normal\",\n      \"tabs\": [\n        {\n          \"id\": 101,\n          \"active\": true,\n          \"pinned\": false,\n          \"url\": \"https://example.org/\",\n          \"title\": \"Beispiel\"\n        },\n        {\n          \"id\": 102,\n          \"active\": false,\n          \"pinned\": true,\n          \"url\": \"https://example.com/\",\n          \"title\": \"Example Domain\"\n        }\n      ]\n    },\n    {\n      \"id\": 2,\n      \"focused\": false,\n      \"type\": \"normal\",\n      \"tabs\": [\n        {\n          \"id\": 201,\n          \"active\": true,\n          \"pinned\": false,\n          \"url\": \"\",\n          \"title\": \"Neuer Tab\"\n        }\n      ]\n    }\n  ]\n}"}]}}
+# case=2
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{\n  \"tabId\": 42,\n  \"windowId\": 1,\n  \"url\": \"https://example.org/\",\n  \"title\": \"Example Domain\",\n  \"complete\": true,\n  \"settled\": true,\n  \"waitedMs\": 412\n}"}]}}
+# case=3
+{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"{\n  \"tabId\": 42,\n  \"url\": \"https://example.org/\",\n  \"title\": \"Beispielseite\",\n  \"text\": \"Zeile eins\\n\\nZeile zwei\",\n  \"truncated\": false,\n  \"via\": \"innerText\"\n}"}]}}
+# case=4
+{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"{\n  \"tabId\": 42,\n  \"url\": \"https://example.org/\",\n  \"title\": \"Beispielseite\",\n  \"clicked\": \"a#video-title-link\",\n  \"text\": \"Zeile eins\\n\\nZeile zwei\",\n  \"truncated\": false,\n  \"via\": \"innerText\",\n  \"settled\": true,\n  \"waitedMs\": 412\n}"}]}}
+# case=5
+{"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"{\n  \"tabId\": 42,\n  \"url\": \"https://example.org/\",\n  \"title\": \"Beispielseite\",\n  \"typed\": \"input#q\",\n  \"submitted\": true,\n  \"text\": \"Zeile eins\\n\\nZeile zwei\",\n  \"truncated\": false,\n  \"via\": \"innerText\"\n}"}]}}
+# case=6
+{"jsonrpc":"2.0","id":6,"result":{"content":[{"type":"text","text":"{\n  \"tabId\": 42,\n  \"windowId\": 1,\n  \"url\": \"https://example.org/\",\n  \"title\": \"Example Domain\",\n  \"active\": true,\n  \"focused\": true\n}"}]}}
+# case=7
+{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"{\n  \"tabId\": 42,\n  \"url\": \"https://example.org/\",\n  \"title\": \"Beispielseite\",\n  \"count\": 1,\n  \"truncated\": false,\n  \"elements\": [\n    {\n      \"index\": 0,\n      \"selector\": \"a#cart-link\",\n      \"tag\": \"a\",\n      \"id\": \"cart-link\",\n      \"classes\": [\n        \"cart\"\n      ],\n      \"text\": \"Zeile eins\",\n      \"href\": \"https://example.org/\",\n      \"ariaLabel\": null,\n      \"visible\": true,\n      \"disabled\": false,\n      \"rect\": {\n        \"x\": 12,\n        \"y\": 340,\n        \"width\": 120,\n        \"height\": 24\n      }\n    }\n  ]\n}"}]}}
+# case=8
+{"jsonrpc":"2.0","id":8,"result":{"content":[{"type":"text","text":"{\n  \"tabId\": 31,\n  \"url\": \"https://example.org/\",\n  \"title\": \"Beispiel\"\n}"}]}}
+# case=9
+{"jsonrpc":"2.0","id":9,"result":{"content":[{"type":"text","text":"{\n  \"tabId\": 31,\n  \"closed\": true\n}"}]}}
+# case=10
+{"jsonrpc":"2.0","id":10,"result":{"content":[{"type":"text","text":"{\n  \"tabId\": 18,\n  \"url\": \"https://example.org/\",\n  \"title\": \"Beispielseite\",\n  \"elapsedMs\": 4,\n  \"result\": \"Beispielseite\"\n}"}]}}
+# case=11
+{"jsonrpc":"2.0","id":11,"result":{"content":[{"type":"text","text":"{\n  \"tabId\": 20,\n  \"url\": \"https://example.org/\",\n  \"title\": \"Beispielseite\",\n  \"format\": \"png\",\n  \"width\": 1600,\n  \"height\": 900,\n  \"bytes\": 24,\n  \"scaled\": false,\n  \"activated\": false\n}"},{"type":"image","mimeType":"image/png","data":"iVBORw0KGgoAAAAAAAAAAAAAAAAAAAAA"}]}}
+# case=12
+{"jsonrpc":"2.0","id":12,"result":{"content":[{"type":"text","text":"{\n  \"tabId\": 42,\n  \"url\": \"https://example.org/\",\n  \"count\": 2,\n  \"frames\": [\n    {\n      \"href\": \"https://example.org/\",\n      \"top\": true\n    },\n    {\n      \"href\": \"https://widget.example.net/kalender\",\n      \"top\": false\n    }\n  ]\n}"}]}}
+# case=13
+{"jsonrpc":"2.0","id":13,"result":{"content":[{"type":"text","text":"{\n  \"requestedLanguage\": \"en\",\n  \"deliveredLanguage\": \"en\",\n  \"source\": \"ytplayer.bootstrapPlayerResponse\",\n  \"segments\": [\n    {\n      \"time\": 4,\n      \"timeText\": \"0:04\",\n      \"text\": \"Zeile eins\"\n    },\n    {\n      \"time\": 6,\n      \"timeText\": \"0:06\",\n      \"text\": \"Zeile zwei\"\n    },\n    {\n      \"time\": 14,\n      \"timeText\": \"0:14\",\n      \"text\": \"Zeile drei\"\n    }\n  ],\n  \"totalChars\": 32,\n  \"chars\": 32,\n  \"offset\": 0,\n  \"truncated\": false\n}"}]}}
+# case=1
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"Die Extension konnte den Status nicht liefern (code=status_failed)."}],"isError":true}}
+# case=2
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"Die Extension konnte die Anfrage nicht ausführen (code=navigate_failed)."}],"isError":true}}
+# case=3
+{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"Diese Seite kann die Extension nicht lesen (interne Seite oder Sonderformat)."}],"isError":true}}
+# case=4
+{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"Kein Element passt zu: a#video-title-link."}],"isError":true}}
+# case=5
+{"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"Das Element ist kein beschreibbares Feld oder deaktiviert: input#q."}],"isError":true}}
+# case=6
+{"jsonrpc":"2.0","id":6,"result":{"content":[{"type":"text","text":"Kein Agenten-Tab — zuerst browser_navigate aufrufen."}],"isError":true}}
+# case=7
+{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"Der Parameter ist ungültig."}],"isError":true}}
+# case=8
+{"jsonrpc":"2.0","id":8,"result":{"content":[{"type":"text","text":"Es sind schon fünf Agenten-Tabs offen — erst einen schließen."}],"isError":true}}
+# case=9
+{"jsonrpc":"2.0","id":9,"result":{"content":[{"type":"text","text":"Kein Agenten-Tab — zuerst browser_navigate aufrufen."}],"isError":true}}
+# case=10
+{"jsonrpc":"2.0","id":10,"result":{"content":[{"type":"text","text":"Der Code im Agenten-Tab ist gescheitert: the fake extension was told to answer ok:false"}],"isError":true}}
+# case=11
+{"jsonrpc":"2.0","id":11,"result":{"content":[{"type":"text","text":"Der Agenten-Tab ließ sich nicht fotografieren: the fake extension was told to answer ok:false"}],"isError":true}}
+# case=12
+{"jsonrpc":"2.0","id":12,"result":{"content":[{"type":"text","text":"Die Seite lädt noch — bitte gleich noch einmal versuchen."}],"isError":true}}
+# case=13
+{"jsonrpc":"2.0","id":13,"result":{"content":[{"type":"text","text":"Die Seite ist nicht gerendert: the fake extension was told to answer ok:false"}],"isError":true}}
+# case=1
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"browser_status erwartet keine Argumente."}],"isError":true}}
+# case=2
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"browser_navigate erwartet nur `url` und `tab`."}],"isError":true}}
+# case=3
+{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"browser_read erwartet nur `offset`, `maxChars`, `mode`, `frame` und `tab`."}],"isError":true}}
+# case=4
+{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"browser_click erwartet nur `selector`, `frame` und `tab`."}],"isError":true}}
+# case=5
+{"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"browser_type erwartet nur `selector`, `text`, `submit`, `frame` und `tab`."}],"isError":true}}
+# case=6
+{"jsonrpc":"2.0","id":6,"result":{"content":[{"type":"text","text":"browser_focus erwartet nur `tab`."}],"isError":true}}
+# case=7
+{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"browser_inspect erwartet nur `selector`, `text`, `limit`, `includeHidden`, `frame` und `tab`."}],"isError":true}}
+# case=8
+{"jsonrpc":"2.0","id":8,"result":{"content":[{"type":"text","text":"browser_open_tab erwartet nur `url`."}],"isError":true}}
+# case=9
+{"jsonrpc":"2.0","id":9,"result":{"content":[{"type":"text","text":"browser_close_tab erwartet nur `tab`."}],"isError":true}}
+# case=10
+{"jsonrpc":"2.0","id":10,"result":{"content":[{"type":"text","text":"browser_eval erwartet nur `code`, `frame` und `tab`."}],"isError":true}}
+# case=11
+{"jsonrpc":"2.0","id":11,"result":{"content":[{"type":"text","text":"browser_screenshot erwartet nur `tab`."}],"isError":true}}
+# case=12
+{"jsonrpc":"2.0","id":12,"result":{"content":[{"type":"text","text":"browser_frames erwartet nur `tab`."}],"isError":true}}
+# case=13
+{"jsonrpc":"2.0","id":13,"result":{"content":[{"type":"text","text":"browser_transcript erwartet nur `offset`, `maxChars` und `tab`."}],"isError":true}}

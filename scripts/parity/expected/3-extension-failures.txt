@@ -1,0 +1,5 @@
+# cases=2
+# case=1
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"Keine Extension verbunden — Firefox mit der Extension läuft nicht oder die Verbindung ist getrennt."}],"isError":true}}
+# case=1
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"Die Extension hat nicht geantwortet (Zeitüberschreitung)."}],"isError":true}}
