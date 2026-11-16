@@ -19,7 +19,8 @@ Node-Weg fällt erst in dem Commit, der die Parität belegt hat.
 
 - **Dasselbe Protokoll zu beiden Seiten.** Die Extension spricht unverändert
   `ws://…:8110` mit `hello`/`welcome`/`request`/`response`, denselben
-  Methodennamen, denselben Close-Codes (`4401`, `4408`, `4409`, `1002`, `1003`).
+  Methodennamen, denselben Close-Codes (`4401`, `4408`, `4409`, `1002`, `1003`,
+  `1009`).
   Ein MCP-Client spricht unverändert `POST /mcp` mit Bearer-Token (und den
   stdio-Rückfall).
 - **Dieselbe MCP-Oberfläche.** Dreizehn Werkzeuge, dieselben Schemata, dieselben
@@ -51,6 +52,29 @@ Node-Weg fällt erst in dem Commit, der die Parität belegt hat.
 - **Kein Parallelbetrieb auf Dauer.** Zwei Implementierungen sind eine
   Übergangsphase mit Enddatum, kein Zustand.
 - **Keine neuen Funktionen.** Was heute fehlt, fehlt auch nach dem Port.
+
+## Dependency changes
+
+Neue Abhängigkeiten — und **die einzigen**:
+
+| Crate | Zweck | Lizenz |
+|---|---|---|
+| `tokio` (features: `rt-multi-thread`, `net`, `time`, `signal`, `sync`, `io-util`, `macros`) | asynchrones I/O, Fristen, Signalende | MIT |
+| `serde` + `serde_json` (feature `preserve_order`) | JSON-RPC, Werkzeugschemata, Antworten **in der Reihenfolge von `mcp.mjs`** | MIT / Apache-2.0 |
+| `sha1` + `base64` | `Sec-WebSocket-Accept` des Handshakes | MIT / Apache-2.0 |
+| `hyper` + `http-body-util` | `POST /mcp` (nur der MCP-Port) | MIT |
+| `windows-sys` (Ziel `cfg(windows)`) | Portbesitzer (`GetExtendedTcpTable`), `GetFileType`, Prozessname | MIT / Apache-2.0 |
+
+**Kein `hyper` für den Extension-Port.** Dort steht ein eigener, kleiner
+HTTP/1.1-Kopfleser: er sieht genau zwei Formen (`GET` mit `Upgrade` und alles
+andere ⇒ `426`), und die Bytes **nach** dem Handshake müssen ohnehin in den
+Frame-Codec — genau die Stelle, an der eine Bibliothek Arbeit spart oder
+Bytes verschluckt. Damit ist die Frage aus einer früheren Runde entschieden
+statt offen.
+
+**Versionen:** die exakten Versionen stehen im **eingecheckten `Cargo.lock`**,
+eingefroren in Stufe 0; die Tabelle nennt Crates, Zweck und Lizenz. Ein
+`cargo update` ist ein eigener Commit mit eigenem Parity-Lauf.
 
 ## Die Entscheidungen des Betreibers (2026-11-16)
 
@@ -101,8 +125,29 @@ Inkrements.
 
 ## Die Parität
 
-**Definition:** für dieselben Eingaben liefern beide Implementierungen
-dieselben Bytes — mit einer benannten Ausnahme: Zeitstempel im Log.
+**Definition:** für dieselben Eingaben liefert die Implementierung die Bytes aus
+einem **eingefrorenen Soll-Artefakt** — mit einer benannten Ausnahme:
+Zeitstempel im Log.
+
+**Warum nicht rein differentiell:** ein Vergleich „Node gegen Rust" ist grün,
+wenn **beide** dasselbe Falsche tun — zweimal kein Close-Frame, zweimal Exit
+`0`, zweimal leere Logausgabe. Ein Vergleich ohne Sollerwartung misst
+Gleichheit, nicht Richtigkeit. Deshalb:
+
+- **Stufe 1 friert ein:** jedes der sieben Ergebnisse wird **von der Node-Bridge**
+  aufgezeichnet und als `scripts/parity/expected/<n>-<fall>.txt` eingecheckt —
+  mit den Bytes, die heute richtig sind (`code=4401`, `exit=1`,
+  `listening on 127.0.0.1:18140 log=info`, …). Der Reviewer liest sie beim
+  Commit.
+- **Ab dann gilt: `--check`** vergleicht jede Implementierung gegen diese
+  Artefakte. `--impl node` gegen die Artefakte beweist, dass der Maßstab den
+  heutigen Code beschreibt; `--impl rust` gegen dieselben Artefakte ist die
+  eigentliche Parität.
+- **Nach Stufe 4b** gibt es keine zweite Implementierung mehr; `parity.sh
+  --check` läuft dann nur noch gegen die Artefakte — und bleibt damit das
+  Regressionsnetz.
+- **`--self-test` mutiert je Vergleich genau ein Artefakt** und muss **7/7**
+  Unterschiede melden (nicht 3/3 für sieben Vergleiche).
 
 Ein Prüflauf (`scripts/parity.sh`, Stufe 1 des Plans) startet je
 Implementierung mit einem **geskripteten Ersatz für die Extension** (ein
@@ -134,55 +179,69 @@ WebSocket-Client, der die Antworten aus Fixtures liefert) und vergleicht:
 ## Acceptance criteria
 
 1. **Die Rust-Bridge spricht dasselbe Protokoll.** Beweis:
-   `cargo test --manifest-path bridge-rs/Cargo.toml` ⇒ 0, und
-   `bash scripts/parity.sh` (Default `--impl node,rust`) ⇒ **sieben Vergleiche,
-   alle „identisch"**, Exit 0. Dazu `bash scripts/parity.sh --self-test` ⇒
-   „3/3 Gegenproben rot" — ohne diese Gegenprobe ist „identisch" nicht von
-   „der Vergleich liest nichts" zu unterscheiden.
+   `cargo test --manifest-path bridge-rs/Cargo.toml` ⇒ 0;
+   `bash scripts/parity.sh --impl node --check` ⇒ **7/7 gegen die eingefrorenen
+   Artefakte** (der Maßstab beschreibt den heutigen Code);
+   `bash scripts/parity.sh --impl rust --check` ⇒ **7/7** (die Parität);
+   `bash scripts/parity.sh --self-test` ⇒ **7/7 Gegenproben rot** — je Vergleich
+   eine Mutation. „Identisch" ohne Soll-Artefakt und ohne Selbsttest beweist
+   nichts.
 2. **Ein Binary, zwei Plattformen.** Beweis:
    `cargo build --release --manifest-path bridge-rs/Cargo.toml` ⇒ 0, und
    `find bridge-rs/target/x86_64-unknown-linux-musl/release -maxdepth 1 -type f
    -executable | wc -l` ⇒ **1** (nicht `ls` zählen: `cargo` legt `.d`-Dateien
-   daneben); `cargo build --release --target x86_64-pc-windows-gnu` ⇒ 0 und
-   `file` nennt `PE32+ executable (console) x86-64`. Die Größe ist ein
+   daneben); `cargo build --release --manifest-path bridge-rs/Cargo.toml
+   --target x86_64-pc-windows-gnu` ⇒ 0 und
+   `file -b bridge-rs/target/x86_64-pc-windows-gnu/release/browser-control-bridge.exe`
+   ⇒ `PE32+ executable (console) x86-64`. Die Größe ist ein
    **Berichtswert**, kein Kriterium.
 3. **Dieselben Einstellungen und Exit-Codes.** Beweis: die Config-Fälle aus der
    Testlandkarte sind nach Rust übertragen und grün;
-   `grep -ho 'BC_[A-Z_]*' bridge-rs/src/*.rs | sort -u` ⇒ genau sechs Zeilen
+   `grep -rho 'BC_[A-Z_]*' bridge-rs/src | sort -u` ⇒ genau sechs Zeilen
    (`BC_BIND`, `BC_CALL_TIMEOUT_MS`, `BC_HELLO_TIMEOUT_MS`, `BC_HTTP_PORT`,
    `BC_LOG`, `BC_TOKEN_FILE`) — nicht `grep -c` über eine Dateiliste, das je
    Datei eine Zahl druckt.
 4. **Dieselben Logzeilen.** Beweis: der Paritätsvergleich 7 ist grün, und
-   `grep -ho 'listening on\|extension connected\|status windows=' bridge-rs/src/*.rs
+   `grep -rho 'listening on\|extension connected\|status windows=' bridge-rs/src
    | sort -u | wc -l` ⇒ **3**.
 5. **Die deutschen Sätze sind nicht neu geschrieben.** Beweis: der
    Paritätsvergleich 2 ist grün — die Sätze stammen aus `mcp.mjs`, nicht aus
    einer Übersetzung. **Eine Ausnahme, benannt:** `BRIDGE_FAILED` setzt einen
    Bridge-Bug voraus und ist darum nicht auslösbar; er wird von einem
    Rust-Unit-Test gepinnt, nicht von der Parität.
-6. **Die Ablösung ist eine Stufe, kein Zufall.** Beweis: `bridge/` existiert
-   noch, `docs/18` und `docs/35` sind erst in der Stufe geändert, die den
-   Wechsel vollzieht (`## Dev plan`, Stufe 4); `git log --oneline -- bridge/`
-   zeigt in dieser Stufe **einen** Commit, der alles löscht.
-7. **Die systemd-Unit bleibt gültig.** Beweis: `deploy/browser-control.service`
-   nennt `ExecStart=%h/.local/bin/browser-control-bridge --http`; das Binary
-   lauscht mit `BC_BIND`/`BC_HTTP_PORT` auf `18130`/`18131` (die festen
-   `8110`/`8111` sind Konfigurationsaussage, kein Messwert — sie kollidieren mit
-   dem laufenden Dienst des Betreibers); Paritätsvergleich 5 und 6 grün.
-8. **Windows hat einen Startweg.** Beweis: ein Abschnitt in `INSTALL.md` nennt
-   den Dienst-Wrapper und wie er das Binary startet; `docs/30` (falls dort
-   offen) nennt ihn ebenfalls.
-9. **Kein Node auf dem Zielrechner nötig.** Beweis:
-   `file -b bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge`
-   ⇒ „ELF 64-bit … statically linked" (der Pfad trägt das Ziel, weil
-   `.cargo/config.toml` musl als Default setzt), und
-   `ldd <binary>` ⇒ „not a dynamic executable", Exit 1.
+6. **Die Ablösung ist eine Stufe, kein Zufall.** Beweis: bis Stufe 4b gilt
+   `test -d bridge && echo present` ⇒ `present`; `docs/18` ist erst in 4b
+   geändert; **`docs/35` wird in 4a mitgezogen**, weil 4a `install.sh` umbaut
+   (`docs/README.md`: die Stufe, die das Verhalten umsetzt, zieht die Spec
+   nach). Und `git log --diff-filter=D --oneline -- bridge/ | wc -l` ⇒ **1** —
+   mit `--diff-filter=D`, weil der Anlage-Commit sonst mitzählt.
+7. **Die systemd-Unit bleibt gültig.** Beweis:
+   `grep -c 'ExecStart=%h/.local/bin/browser-control-bridge --http' deploy/browser-control.service`
+   ⇒ **1**; das Binary lauscht wirklich — `BC_BIND=127.0.0.1:18140
+   BC_HTTP_PORT=18141 ./browser-control-bridge --http &` und dann
+   `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18141/mcp` ⇒ `401`
+   (Ports des Parity-Laufs, nicht die der Testsuite; `8110`/`8111` sind
+   Konfigurationsaussage, kein Messwert). Paritätsvergleich 5 und 6 grün.
+8. **Windows hat einen Startweg.** Beweis:
+   `grep -c 'browser-control-bridge.exe' INSTALL.md` ⇒ **≥ 1**;
+   `grep -c 'browser-control-bridge.xml' INSTALL.md docs/30-prozess-und-konsole.md`
+   ⇒ je **≥ 1**; die Aufgabendatei `deploy/windows/browser-control-bridge.xml`
+   existiert und `test/deploy.test.js` pinnt ihre Zeilen. Der **Live-Lauf** bleibt
+   beim Betreiber.
+9. **Kein Node für den Betrieb nötig.** Beweis (Node bleibt für Tests und
+   `scripts/parity.sh`):
+   `file -b bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge
+   | grep -Eq 'statically linked|static-pie linked'` ⇒ Exit 0 (Rust baut musl je
+   nach Toolchain als `static-pie`), und
+   `ldd bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge`
+   ⇒ „not a dynamic executable", Exit 1.
 10. **Kein Produktcode außerhalb der Grenze vor Stufe 4.** Beweis:
     `git status --porcelain` nennt in den Stufen 0–3 `bridge-rs/`,
     `scripts/parity*`, `docs/…` und **nichts** unter `bridge/` oder `extension/`;
-    in Stufe 4a zusätzlich `deploy/`, `scripts/install.sh`, `test/deploy.test.js`,
-    `test/install.test.js`; in Stufe 4b die Löschung. Was in welcher Stufe
-    erlaubt ist, steht im `## Dev plan`.
+    in Stufe 3 `deploy/windows/` (die Aufgabendatei), in Stufe 4a
+    `deploy/browser-control.service`, `scripts/install.sh`,
+    `test/deploy.test.js`, `test/install.test.js`; in Stufe 4b die Löschung.
+    Was in welcher Stufe erlaubt ist, steht im `## Dev plan`.
 
 ## Dev plan
 
@@ -235,8 +294,11 @@ Gelingt der Linker nicht, ist die dokumentierte Antwort „Windows wird unter
 Windows gebaut" — und jede Windows-Proof-Zeile wandert auf diese Maschine.
 
 Umsetzer: `bridge-rs/Cargo.toml` (ein `[[bin]]`), `bridge-rs/.gitignore` mit
-`/target` (**nicht** die Wurzel-`.gitignore`), `bridge-rs/.cargo/config.toml`
-mit `[build] target = "x86_64-unknown-linux-musl"`, `bridge-rs/README.md`
+`/target` (**nicht** die Wurzel-`.gitignore`), **kein** `.cargo/config.toml` —
+`--target x86_64-unknown-linux-musl` steht in jedem Befehl, weil Cargo seine
+Konfiguration ab dem Arbeitsverzeichnis liest und ein `[build] target` im
+Unterordner bei `--manifest-path` aus der Wurzel **nicht** greift (der Beweis
+würde sonst im leeren `target/release/` suchen), `bridge-rs/README.md`
 (Toolchain, Cross-Linker, „`cargo test` braucht Node ≥ 22 für den
 Fixture-Peer"), `src/main.rs` ohne Verhalten.
 
@@ -366,8 +428,8 @@ Schlüssel alphabetisch und Vergleich 1/2 wird rot. `SERVER_INFO` bleibt
 
 Proof:
 ```
-cargo test --manifest-path bridge-rs/Cargo.toml --test mcp 2>&1 | grep -cE '^test (mcp|failureTextFor)_[A-Za-z0-9]+ \.\.\. ok'   # ⇒ ≥ 50 (Zahl einfrieren)
-bash scripts/parity.sh --impl node,rust --only 1,2,3,7   # ⇒ 4/7
+cargo test --manifest-path bridge-rs/Cargo.toml --test mcp 2>&1 | tail -1   # ⇒ "test result: ok. N passed; 0 failed" — N wird in dieser Stufe gegen die Zahl der Naht-Fälle in test/mcp.test.js gestellt und im ## Log eingetragen
+bash scripts/parity.sh --impl rust --check --only 1,2,3  # ⇒ 3/7 (Vergleich 7 braucht `--http` aus 2e)
 ```
 
 **Stufe 2e — `http`: `POST /mcp`**
@@ -385,8 +447,8 @@ beim chunked-Körper während des Streamens; `200` + `application/json`; `null` 
 
 Proof:
 ```
-cargo test --manifest-path bridge-rs/Cargo.toml --test http 2>&1 | grep -cE '^test http_[A-Za-z0-9]+ \.\.\. ok'   # ⇒ ≥ 16
-bash scripts/parity.sh --impl node,rust --only 7         # ⇒ 1/7
+cargo test --manifest-path bridge-rs/Cargo.toml --test http 2>&1 | grep -cE '^test http_[A-Za-z0-9]+ \.\.\. ok'   # ⇒ 16 (14 Transportfälle + 2 stdio/HTTP-Gleichheit)
+bash scripts/parity.sh --impl rust --check --only 7      # ⇒ 1/7 (jetzt, mit dem HTTP-Listener)
 ```
 
 **Stufe 2f — Prozesstests, stdin-Lebenszyklus, voller Paritätslauf**
@@ -444,10 +506,17 @@ Betreiber (Kriterium 8) und steht danach in `## Bekannte Lücken`.
 Dateien: `deploy/browser-control.service` (`ExecStart=%h/.local/bin/browser-control-bridge
 --http`, `RestartPreventExitStatus=2` bleibt),
 `deploy/windows/browser-control-bridge.xml` (neu), `scripts/install.sh`
-(`check_binary` statt `check_node_version`; `install_binary` kopiert nach
-`$HOME/.local/bin` mit `0755`; `guard_path` bekommt `$HOME/.local/bin` als
-dritten erlaubten Ort; `--fix-path` entfällt, `--uninstall` räumt eine alte
-Drop-in-Datei weiter ab), `test/deploy.test.js`, `test/install.test.js`.
+(`check_binary` statt `check_node_version`; `install_binary` kopiert aus
+`<clone>/bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge`
+nach `$HOME/.local/bin` mit `0755` — fehlt die Quelle, bricht der Lauf mit
+„nicht gebaut, `cargo build --release --target x86_64-unknown-linux-musl`
+zuerst" und Exit `1` ab; `guard_path` bekommt `$HOME/.local/bin` als dritten
+erlaubten Ort, und der Ablehnungsfall
+`install_guardPathRejectsAPathOutsideTheAllowedSet` wird **erweitert**, nicht
+aufgeweicht; `--fix-path` entfällt, `--uninstall` räumt eine alte Drop-in-Datei
+weiter ab), `test/deploy.test.js`, `test/install.test.js` mit zwei neuen Fällen:
+`install_copiesTheBinaryToLocalBin` und
+`install_withMissingBinary_abortsBeforeWriting`.
 
 Warum vor 4b und getrennt: `bridge/` lebt noch, `npm test` bleibt mit beiden
 Bäumen grün, und der Unit-/Installer-Wechsel ist für sich reviewbar. `docs/18`
@@ -456,7 +525,7 @@ das ausdrücklich.
 
 Proof:
 ```
-node --test --test-reporter=tap test/deploy.test.js test/install.test.js 2>&1 | grep -cE '^ok [0-9]+ - (deploy|install)_'   # ⇒ ≥ 26
+node --test --test-reporter=tap test/deploy.test.js test/install.test.js 2>&1 | grep -cE '^ok [0-9]+ - (install_|browserControlService_|execStart_)'   # ⇒ 32 (21 install_ + 9 Unit-/ExecStart-Fälle + 2 neue install_-Fälle)
 grep -c 'ExecStart=%h/.local/bin/browser-control-bridge --http' deploy/browser-control.service   # ⇒ 1
 grep -c 'bridge/bridge.mjs' scripts/install.sh                                                   # ⇒ 0
 bash -n scripts/install.sh; echo $?                                                              # ⇒ 0
@@ -482,7 +551,7 @@ git log --oneline -- bridge/ | wc -l                       # ⇒ genau der eine 
 npm test 2>&1 | grep -E '^# (tests|fail|cancelled|skipped)'  # ⇒ fail/cancelled = 0
 cargo test --manifest-path bridge-rs/Cargo.toml 2>&1 | tail -1
 bash scripts/parity.sh; echo $?                            # ⇒ 7/7, 0
-grep -rn 'bridge/' test/ scripts/ deploy/ package.json     # ⇒ nur test/fixtures-Kopfkommentare
+grep -rnE 'bridge/config\.mjs|bridge/bridge\.mjs|bridge\.mjs' test/ scripts/ deploy/ package.json   # ⇒ keine Ausgabe
 ```
 
 ### The parity check as built
@@ -512,17 +581,17 @@ deterministisch. Deshalb ist `--self-test` Teil von Stufe 1.
 
 ### The test map, corrected
 
-**1:1 übertragbar:** die 15 reinen Fälle aus `test/hub.test.js`
-(`formatStatusLine_*`, `debugBlockOf_*`, `verifyToken_*`), die 13 aus
+**1:1 übertragbar:** die 14 reinen Fälle aus `test/hub.test.js`
+(2 `formatStatusLine_*`, 9 `debugBlockOf_*`, 3 `verifyToken_*`), die 13 aus
 `test/websocket.test.js`, die 3 aus `test/config.test.js`, die 2 aus
-`test/port-owner.test.js`, die ~40 Naht-Fälle aus `test/mcp.test.js`, die 14 aus
-`test/http-transport.test.js`, die 2 Invarianten aus `test/ports.test.js`.
+`test/port-owner.test.js`, die Naht-Fälle aus `test/mcp.test.js` (die Zahl wird in Stufe 2d ausgezählt und im `## Log` eingetragen), die 14 aus
+`test/http-transport.test.js`, die 3 Invarianten aus `test/ports.test.js`.
 
 **Umgeschrieben, weil sie Node-Interna prüfen:** `test/protocol.test.js` (17) —
 `vm.runInNewContext` und `Object.isFrozen` haben keine Entsprechung; Ersatz sind
 3 Fälle mit einem Textauszug aus `extension/protocol.js`, der bei unbekannter
-Form laut scheitert. Die 15 Socket-Fälle aus `test/hub.test.js` (kein Pollen mehr
-nötig, der Test treibt `hub.on_message` direkt). Die ~70 Prozessfälle aus
+Form laut scheitert. Die 41 `hub_*`-Fälle aus `test/hub.test.js` (kein Pollen
+mehr nötig, der Test treibt `hub.on_message` direkt). Die Prozessfälle aus
 `test/mcp.test.js` und die 10 aus `test/bridge.test.js`
 (`spawn(process.execPath, …)` ⇒ `Command::new(binary)`; die Fixture bleibt
 dieselbe Datei). `test/ports.test.js` wird `tests/ports.rs` mit eigener
@@ -568,8 +637,8 @@ Auftrag für einen Implementer.
 - **3** braucht 2f; **4a** braucht ein gebautes statisches Binary; **4b** braucht
   4a. Keine Stufe wartet auf eine spätere.
 - Unberührt bis 4b: `bridge/**`, `extension/**`, `test/fixtures/fake-extension.mjs`,
-  `package.json`. Unberührt bis 4a: `docs/18`, `docs/35`, `deploy/`,
-  `scripts/install.sh`.
+  `package.json`. Unberührt bis 4a: `docs/18`, `deploy/browser-control.service`,
+  `scripts/install.sh`; unberührt bis 4b: `docs/18`, `docs/35`.
 
 ### What the next increment inherits
 
@@ -585,9 +654,10 @@ Auftrag für einen Implementer.
 ## Amendments to previous spec docs
 
 Der Port löst **die Umsetzung** von `docs/18` und `docs/35` ab — nicht deren
-Verhalten. Beide bleiben `active`; die Zeilen werden in **Stufe 4b** geändert,
-wenn das Binary den Node-Weg ersetzt (nicht vorher, sonst beschreiben sie
-Verhalten, das es noch nicht gibt).
+Verhalten. Beide bleiben `active`. Die Zeilen werden in der Stufe geändert, die
+das jeweilige Verhalten umsetzt (`docs/README.md`): **`docs/35` in 4a**, weil dort
+`scripts/install.sh` auf das Binary umgestellt wird; **`docs/18` in 4b**, weil
+erst dort der Dienst wirklich das Binary startet.
 
 | Datei | Stelle | alt | neu |
 |---|---|---|---|
@@ -596,7 +666,8 @@ Verhalten, das es noch nicht gibt).
 | `docs/35-…` | `## Ziel` und Stufe 1 | `check_node_version`, `--fix-path` für den Node-`PATH` | `check_binary` (Binary vorhanden), `install_binary` nach `$HOME/.local/bin`; `--fix-path` entfällt |
 | `docs/35-…` | `## Bekannte Lücken` | `~/.config/…` und `~/.config/systemd/user/` als einzige Schreiborte | dazu `~/.local/bin` (der Pfadwächter bekommt ihn als dritten Ort) |
 | `docs/30-…` | Windows-Betrieb | Konsole startet `node bridge/bridge.mjs` | Konsole startet `browser-control-bridge.exe`; Dienst als Task-Scheduler-Aufgabe (`deploy/windows/browser-control-bridge.xml`) |
-| `INSTALL.md`, `CONTRIBUTING.md` | Prerequisites/Abnahme | „Node ≥ 22" als Betriebsvoraussetzung | Node nur für Tests und `scripts/parity.sh`; `cargo test` kommt in die Abnahme |
+| `INSTALL.md`, `CONTRIBUTING.md` | Prerequisites/Abnahme | „Node ≥ 22" als Betriebsvoraussetzung | Node nur für Tests und `scripts/parity.sh`; `cargo test` kommt in die Abnahme (Stufe 4b) |
+| `docs/ROADMAP.md` | Zeilen 23/24, 26–28 | Signierung setzt MV3 voraus | der Rust-Port berührt die Signatur nicht; MV3 bleibt die Voraussetzung, weil die Extension JS bleibt |
 
 ## Bekannte Lücken
 
@@ -605,24 +676,67 @@ Stand 2026-11-16, vor der Umsetzung:
 - **Keine Rust-Werkzeugkette auf dem Zielrechner.** Ob `x86_64-pc-windows-gnu`
   hier baut (Cross-Linker, `mingw-w64`), ist ungemessen.
 - **Die Größe ist eine Schätzung** (5–10 MB statisch). Kein Messwert.
-- **Windows-Dienst ungemessen:** `windows-service`, NSSM oder Task Scheduler —
-  welche Form, entscheidet der Plan, die Machbarkeit der Live-Lauf.
-- **Der Paritätsmaßstab ist noch nicht gebaut.** Ob zeichengenaue Gleichheit
-  bei Logzeilen und JSON überhaupt erreichbar ist, zeigt erst Stufe 1.
+- **Windows-Dienst ungemessen:** die Form ist entschieden (Task Scheduler,
+  `AtLogOn`, `InteractiveToken`, ohne Admin — `deploy/windows/…xml`); ungemessen
+  ist, ob er auf einem echten Windows-Rechner so läuft. Das ist eine
+  Betreiber-Messung.
+- **Der Paritätsmaßstab ist noch nicht gebaut.** Die Spec hält
+  zeichengenaue Gleichheit für erreichbar (vier benannte Bedingungen im
+  `## Dev plan`); belegt ist das erst, wenn Stufe 1 die Soll-Artefakte aus der
+  Node-Bridge aufgezeichnet und Stufe 2f sie getroffen hat.
 
 ## Open questions
 
-**Keine offenen, die den Bau blockieren.** Entschieden am 2026-11-16: Rust,
-paralleler Aufbau mit Löschung nach Parität, Linux und Windows x86_64.
+**Keine offenen.** Entschieden am 2026-11-16: Rust; paralleler Aufbau mit
+Löschung nach Parität; Linux und Windows x86_64. Die HTTP-Frage ist mit
+`## Dependency changes` entschieden (eigener Kopfleser am Extension-Port,
+`hyper` nur für `/mcp`).
 
 ## Review
 
-### Runde 1 — steht aus
+### Runde 1 — 2026-11-16, `grizzled-senior-dev`: 🤔 Needs a rethink
 
-Die Spec geht durch das Gate, sobald Ziel und Kriterien abgesprochen sind.
+Sieben Blocker, acht Major, sechs Kleinigkeiten. **Alle übernommen** (`## Log`).
+Die Blocker: die Parität war rein differentiell und damit für „beide falsch"
+grün (jetzt Soll-Artefakte je Vergleich, Selbsttest 7/7); nach der Löschung von
+`bridge/` hätte der letzte Beweis keine Vergleichsseite mehr (jetzt gegen die
+eingefrorenen Artefakte); Stufe 2d verlangte einen Vergleich, der `--http` erst
+in 2e bekommt; `git log -- bridge/` zählt den Anlage-Commit mit (jetzt
+`--diff-filter=D`); keine `## Dependency changes` trotz tokio/serde/windows-sys;
+eine Abhängigkeitsfrage stand offen, ohne unter `## Open questions` zu stehen;
+und Stufe 3 legte `deploy/windows/` an, das Kriterium 10 bis 4a verbot.
 
 ## Log
 
 - **2026-11-16, Betreiberentscheid:** Bridge nach Rust portieren, als **Ersatz**
   mit parallelem Aufbau und Löschung erst nach Parität; Zielplattformen Linux
-  und Windows x86_64.
+  und Windows x86_64. Ziel und Kriterien wurden vor dem Dev-Plan abgesprochen.
+- **Runde 1 — B1 übernommen:** die Parität bekommt **Soll-Artefakte**
+  (`scripts/parity/expected/`), aufgezeichnet von der Node-Bridge in Stufe 1;
+  `--check` vergleicht jede Implementierung dagegen, `--self-test` mutiert je
+  Vergleich eines (7/7).
+- **Runde 1 — B2 übernommen:** nach 4b läuft `parity.sh --check` gegen die
+  eingefrorenen Artefakte; die Node-Seite ist dann nicht mehr nötig.
+- **Runde 1 — B3 übernommen:** Stufe 2d prüft `1,2,3` (3/7), Vergleich 7 gehört
+  zu 2e.
+- **Runde 1 — B4 übernommen:** Kriterium 6 zählt
+  `git log --diff-filter=D --oneline -- bridge/` ⇒ 1 und prüft `test -d bridge`
+  vor der Stufe.
+- **Runde 1 — B5 übernommen:** `## Dependency changes` nennt tokio, serde/
+  serde_json, sha1/base64, hyper/http-body-util, windows-sys mit Lizenz; die
+  Versionen stehen im eingecheckten `Cargo.lock`.
+- **Runde 1 — B6 übernommen:** der Extension-Port bekommt einen eigenen
+  HTTP/1.1-Kopfleser, `hyper` nur für `/mcp` — entschieden statt offen.
+- **Runde 1 — B7 übernommen:** Kriterium 10 erlaubt `deploy/windows/` in Stufe 3.
+- **Runde 1 — M1 bis M8 übernommen:** 4a-Grep zählt `install_|browserControlService_|execStart_`
+  (32, nicht 26); Zahlen statt „≥" in 2e (16) und 2d (im `## Log`); kein
+  `.cargo/config.toml` (Cargo liest ab cwd), `--target` in jedem Befehl;
+  Kriterium 9 prüft `statically linked|static-pie linked` mit konkretem Pfad;
+  Kriterium 2 baut Windows mit `--manifest-path`; Kriterium 7 weist ein
+  **lauschendes** Binary per `curl` nach (Parity-Ports); `docs/35` wird in 4a
+  mitgezogen; `install_binary` nennt Quelle und Fehlerfall.
+- **Runde 1 — K1 bis K6 übernommen:** 4b-Grep fängt auch `bridge.mjs` und die
+  Kommentare in `install.sh`; Lücken, die der Plan schon beantwortet hatte,
+  sind korrigiert; die Testlandkarte zählt 14/41/3 statt 15/15/2; die Greps in
+  Kriterium 3/4 laufen rekursiv; Kriterium 8 hat ein Kommando; Review mit Datum
+  und Verdict, `## Log` nennt auch die Kriterien-Absprache.
