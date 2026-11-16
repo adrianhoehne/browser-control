@@ -41,11 +41,18 @@ Neue Abhängigkeiten — und **die einzigen**:
 
 | Crate | Zweck | Lizenz |
 |---|---|---|
-| `tokio` (`rt-multi-thread`, `net`, `time`, `signal`, `sync`, `io-util`, `macros`) | asynchrones I/O, Fristen, Signalende | MIT |
+| `tokio` (`rt-multi-thread`, `net`, `time`, `signal`, `sync`, `io-util`, `io-std`, `process`, `macros`) | asynchrones I/O, Fristen, Signalende, stdin/stdout, Prozessfälle | MIT |
 | `serde` + `serde_json` (`preserve_order`) | JSON-RPC, Schemata, Antworten **in der Reihenfolge von `mcp.mjs`** | MIT / Apache-2.0 |
+| `sha2` | Tokenvergleich wie heute: `timingSafeEqual(sha256(…))` in `bridge/hub.mjs` | MIT / Apache-2.0 |
+| `subtle` | konstantzeitiger Vergleich der beiden Hashes (`==` auf `[u8]` bricht beim ersten Unterschied ab — ein Regressionsschritt) | MIT |
 | `sha1` + `base64` | `Sec-WebSocket-Accept` | MIT / Apache-2.0 |
-| `hyper` + `http-body-util` | `POST /mcp` (nur der MCP-Port) | MIT |
-| `windows-sys` (`cfg(windows)`) | Portbesitzer, `GetFileType`, Prozessname | MIT / Apache-2.0 |
+| `hyper` (`server`, `http1`) + `hyper-util` (`tokio`, `server`) + `http-body-util` | `POST /mcp` (nur der MCP-Port) | MIT |
+| `windows-sys` (`cfg(windows)`; Features `Win32_NetworkManagement_IpHelper`, `Win32_Storage_FileSystem`, `Win32_System_Threading`, `Win32_Foundation`) | Portbesitzer, `GetFileType`, Prozessname | MIT / Apache-2.0 |
+
+**`preserve_order` ist entschieden, nicht geerbt:** es zieht `indexmap` (MIT/Apache-2.0)
+mit. Die Alternative wäre, jede Antwort aus `json!`-Literalen in fester
+Reihenfolge zu bauen — genau das tut der Code heute nicht (er gibt das Ergebnis
+der Extension unverändert aus), deshalb bleibt es bei `preserve_order`.
 
 **Kein `hyper` für den Extension-Port.** Dort steht ein eigener, kleiner
 HTTP/1.1-Kopfleser: er sieht genau zwei Formen (`GET` mit `Upgrade`, alles
@@ -53,8 +60,9 @@ andere ⇒ `426`), und die Bytes **nach** dem Handshake müssen ohnehin in den
 Frame-Codec — genau die Stelle, an der eine Bibliothek Arbeit spart oder Bytes
 verschluckt.
 
-**Versionen:** die exakten Versionen stehen im **eingecheckten `Cargo.lock`**.
-Er entsteht in Stufe 2a (erste Abhängigkeit) und wird ab dort mitgepflegt; ein
+**Versionen:** die exakten Versionen stehen im **eingecheckten `Cargo.lock`** —
+er existiert seit Stufe 1 (leerer Graph) und **wächst** in 2a mit der ersten
+Abhängigkeit. Die in 2a eingetragenen Versionen stehen im `## Log`; ein
 `cargo update` ist ein eigener Commit mit eigenem Parity-Lauf.
 
 ## Das Inventar (aus dem Code gelesen, 2026-11-16)
@@ -117,9 +125,9 @@ Node-Suite nachgezogen.
 |---|---|---|
 | `bridge-rs/tests/protocol.rs` | `protocol_constants_matchTheExtension` | dieselben Konstanten wie `extension/protocol.js` |
 | `bridge-rs/tests/ws.rs` | `ws_onAnAnnouncedOversizedFrame_shouldCloseWith1009BeforeThePayloadArrives` | die Grenze feuert vor dem Puffern |
-| `bridge-rs/tests/hub.rs` | die 55 Fälle aus `test/hub.test.js` (14 rein + 41 Sitzung) | Sitzung, Fristen, Statuszeilen |
-| `bridge-rs/tests/mcp.rs` | `mcp_toolsListIsByteIdentical`, `failureTextFor_*` | Werkzeuge und deutsche Sätze |
-| `bridge-rs/tests/http.rs` | 16 Fälle | Auth, Grenzen, Statuscodes |
+| `bridge-rs/tests/hub.rs` | 55 Fälle: die 14 reinen (`formatStatusLine_*`, `debugBlockOf_*`, `verifyToken_*`), 41 Sitzungsfälle (`hub_*`) und neu `hub_welcomeFrame_shouldCarryTheBridgeVersionAndTheProtocol` | Sitzung, Fristen, Statuszeilen, `welcome` |
+| `bridge-rs/tests/mcp.rs` | `mcp_toolsListIsByteIdentical`, `failureTextFor_transcriptNeedsFocus_shouldUseTheExtensionMessage`, die Naht-Fälle (Zahl in 2d) und die Prozessfälle aus 2f | Werkzeuge, deutsche Sätze, stdio |
+| `bridge-rs/tests/http.rs` | 14 portierte (`startHttpTransport_*` aus `test/http-transport.test.js`) + 2 neue (`http_withTheSameAnswerAsStdio_shouldMatch`, `http_rejectsAnOversizedChunkedBody`) = **16** | Auth, Grenzen, Statuscodes |
 | `bridge-rs/tests/bridge.rs` | `mcp_whenStdinEnds_shouldExitZeroAfterASingleShutdownLine`, `mcp_withAnIgnoredStdin_shouldKeepRunningAndListeningAfterTheEof` | stdin-Lebenszyklus |
 | **live (Betreiber)** | die echte Extension verbindet sich mit dem Binary | der Port ist kein Selbstgespräch |
 
@@ -127,7 +135,7 @@ Node-Suite nachgezogen.
 
 1. **Die Module sind portiert und paritätisch.** Beweis:
    `cargo test --manifest-path bridge-rs/Cargo.toml` ⇒ 0 failed, und
-   `bash scripts/parity.sh --impl rust --check` ⇒ **7/7 wie erwartet**, Exit 0.
+   `cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check` ⇒ **7/7 wie erwartet**, Exit 0.
 2. **Dieselben Einstellungen und Exit-Codes.** Beweis:
    `grep -rho 'BC_[A-Z_]*' bridge-rs/src | sort -u` ⇒ sechs Zeilen (`BC_BIND`,
    `BC_CALL_TIMEOUT_MS`, `BC_HELLO_TIMEOUT_MS`, `BC_HTTP_PORT`, `BC_LOG`,
@@ -144,24 +152,34 @@ Node-Suite nachgezogen.
    erreicht der Vergleich nicht.
 5. **Windows ist gebaut.** Beweis:
    `cargo build --release --manifest-path bridge-rs/Cargo.toml --target
-   x86_64-pc-windows-gnu` ⇒ 0; `cargo clippy … --target
-   x86_64-pc-windows-gnu -- -D warnings` ⇒ 0; `file -b …/browser-control-bridge.exe`
-   ⇒ `PE32+ executable (console) x86-64`. **Der Lauf auf Windows ist eine
+   x86_64-pc-windows-gnu` ⇒ 0; `cargo clippy --manifest-path
+   bridge-rs/Cargo.toml --target x86_64-pc-windows-gnu --all-targets -- -D warnings`
+   ⇒ 0; `file -b …/browser-control-bridge.exe | grep -Eq 'PE32\+ executable
+   \(console\) x86-64'` ⇒ 0 (Teilprüfung — `file` hängt Abschnittszahl und
+   `for MS Windows` an). **Der Lauf auf Windows ist eine
    Betreiber-Messung** (`## Bekannte Lücken`).
-6. **Der Schnitt ist eine Stufe.** Beweis: `test -d bridge && echo present` ⇒
-   `present` bis 4b; danach `gone`; `git log --diff-filter=D --oneline -- bridge/
+6. **Der Schnitt ist eine Stufe.** Beweis — zwei Zeitpunkte:
+   `test -d bridge && echo present || echo gone` ⇒ `present` bis 4b, danach
+   `gone`; `git log --diff-filter=D --oneline -- bridge/
    | wc -l` ⇒ **1**.
 7. **Unit und Installer zeigen auf das Binary.** Beweis:
    `grep -c 'ExecStart=%h/.local/bin/browser-control-bridge --http' deploy/browser-control.service`
    ⇒ **1**; `grep -c 'bridge/bridge.mjs' scripts/install.sh` ⇒ **0**;
    `node --test --test-reporter=tap test/deploy.test.js test/install.test.js |
-   grep -cE '^ok [0-9]+ - (install_|browserControlService_|execStart_)'` ⇒ **32**;
-   und das Binary lauscht wirklich: `BC_BIND=127.0.0.1:18115
-   BC_HTTP_PORT=18116 ./browser-control-bridge --http &`, dann
-   `curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:18116/mcp`
-   ⇒ `401` (mit `-X POST`, weil die Reihenfolge Pfad → Methode → Token lautet).
-8. **Die 764 → kleineren Node-Tests bleiben grün.** Beweis: `npm test` ⇒
-   `# fail 0`, `# cancelled 0`, `# skipped 0`; `npm run check` ⇒ 0.
+   grep -cE '^ok [0-9]+ - (install_|browserControlService_|execStart_)'` ⇒ **31**
+   (21 heutige `install_` − 1 entfallener `fixPath`-Fall + 2 neue + 9
+   Unit-/`ExecStart`-Fälle);
+   und das Binary lauscht wirklich: `BC_BIND=127.0.0.1:18115 BC_HTTP_PORT=18116
+   BC_TOKEN_FILE=<mktemp>/token $HOME/.local/bin/browser-control-bridge --http &`
+   (die Tokendatei mit ≥ 32 Hex-Zeichen füllen — ohne sie endet der Prozess mit
+   `2` und `curl` druckt `000`), dann `curl -s -o /dev/null -w '%{http_code}'
+   -X POST http://127.0.0.1:18116/mcp` ⇒ `401` (mit `-X POST`, weil die
+   Reihenfolge Pfad → Methode → Token lautet).
+8. **Die Node-Suite bleibt grün und schrumpft nachvollziehbar.** Beweis:
+   `npm test` ⇒ `# fail 0`, `# cancelled 0`, `# skipped 0`; **in 4b** wird die
+   Zahl `# tests N` gegen die gelöschten 10 Dateien (234 Fälle) geprüft und im
+   `## Log` eingetragen — `# fail 0` allein bliebe auch grün, wenn die halbe
+   Suite verschwände. `npm run check` ⇒ 0.
 9. **Kein Produktcode außerhalb der Grenze.** Beweis: `git status --porcelain`
    nennt je Stufe nur die dort erlaubten Dateien (siehe `## Dev plan`);
    `git diff HEAD -- extension/` ⇒ leer.
@@ -170,6 +188,12 @@ Node-Suite nachgezogen.
 
 ## Dev plan
 
+**Der Release-Build gehört zu jeder Stufe, die `--impl rust` aufruft.**
+`parity.sh` baut nie (docs/37) — es startet
+`bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge`. Ohne
+`cargo build --release --target x86_64-unknown-linux-musl` davor misst der Lauf
+das Binary der *letzten* Stufe, und ein zurückgedrehter Fix bliebe grün.
+
 **Stufe 2a — `protocol`, `config`, `log`, `platform/linux`, Startverhalten**
 
 Dateien: `src/{protocol,config,log}.rs`, `src/platform/{mod,linux}.rs`,
@@ -177,7 +201,10 @@ Dateien: `src/{protocol,config,log}.rs`, `src/platform/{mod,linux}.rs`,
 SIGTERM ⇒ `received SIGTERM, shutting down` + `0`), `tests/{protocol,config,platform}.rs`,
 `tests/common/mod.rs`, `tests/ports.rs`, `Cargo.toml` (tokio), `Cargo.lock`.
 
-Mitzuportieren, weil es Verhalten ist: `parseBind` (letzter Doppelpunkt,
+Mitzuportieren, weil es Verhalten ist: **`log_line` bildet `toISOString()`
+exakt nach** (immer drei Millisekunden, `Z`) — die Maskierung des Maßstabs
+strippt genau dieses Präfix, jeder andere Zeitstempel wäre ein Unterschied;
+`parseBind` (letzter Doppelpunkt,
 `[::1]`-Klammern, leerer Host ⇒ `127.0.0.1`, ungültiger Port ⇒ `8110`)
 **einschließlich `:0` ⇒ `8110`** (nicht „reparieren"); `BC_LOG` nur `info|debug`;
 Token ≥ 32 Hex, getrimmt, `ENOENT` ⇒ `2`, sonst `bridge failed: …` + `1`;
@@ -186,7 +213,7 @@ Token ≥ 32 Hex, getrimmt, `ENOENT` ⇒ `2`, sonst `bridge failed: …` + `1`;
 Proof:
 ```
 cargo test --manifest-path bridge-rs/Cargo.toml --test protocol --test config --test platform
-bash scripts/parity.sh --impl rust --check --only 5,6      # ⇒ 2/7
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check --only 5,6      # ⇒ 2/7
 ```
 
 **Stufe 2b — `ws`: Handshake, Codec, Close**
@@ -213,7 +240,7 @@ Werten aus der Config (Tests: 100–300 ms).
 Proof:
 ```
 cargo test --manifest-path bridge-rs/Cargo.toml --test hub 2>&1 | grep -cE '^test (hub|formatStatusLine|debugBlockOf|verifyToken)_[A-Za-z0-9]+ \.\.\. ok'   # ⇒ 55
-bash scripts/parity.sh --impl rust --check --only 4        # ⇒ 1/7
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check --only 4        # ⇒ 1/7
 ```
 
 **Stufe 2d — Werkzeugschicht und stdio**
@@ -225,11 +252,15 @@ Dateien: `src/mcp/{mod,tools,texts,failure}.rs`, `src/stdio.rs`, `src/main.rs`,
 `tools.rs` schreibt die 13 Einträge als `json!`-Literale **in der Reihenfolge
 von `bridge/mcp.mjs`**; `texts.rs` kopiert `TOOL_TEXTS` wörtlich. `SERVER_INFO`
 bleibt `{"name":"browser-control","version":"0.1.0"}` (nicht aus `Cargo.toml`).
+**`BRIDGE_VERSION`** (`bridge/hub.mjs:19`) ist eine **zweite** harte Version, die
+im `welcome`-Frame landet — kein Artefakt und keiner der 55 Hub-Fälle prüft
+diesen Frame, deshalb pinnt ihn ein eigener Fall (`hub_welcomeFrame_shouldCarry
+TheBridgeVersionAndTheProtocol`).
 
 Proof:
 ```
 cargo test --manifest-path bridge-rs/Cargo.toml --test mcp 2>&1 | tail -1   # ⇒ 0 failed; N im ## Log gegen die Naht-Fälle gestellt
-bash scripts/parity.sh --impl rust --check --only 1,2,3    # ⇒ 3/7 (Vergleich 7 braucht --http aus 2e)
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check --only 1,2,3    # ⇒ 3/7 (Vergleich 7 braucht --http aus 2e)
 ```
 
 **Stufe 2e — `POST /mcp`**
@@ -242,8 +273,8 @@ beim chunked-Körper, `200`, `null` ⇒ `202`; jede Ablehnung mit
 
 Proof:
 ```
-cargo test --manifest-path bridge-rs/Cargo.toml --test http 2>&1 | grep -cE '^test http_[A-Za-z0-9]+ \.\.\. ok'   # ⇒ 16
-bash scripts/parity.sh --impl rust --check --only 7        # ⇒ 1/7
+cargo test --manifest-path bridge-rs/Cargo.toml --test http 2>&1 | grep -cE '^test http_[A-Za-z0-9]+ \.\.\. ok'   # ⇒ 16 (14 portiert + 2 neu, s. Testlandkarte)
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check --only 7        # ⇒ 1/7
 ```
 
 **Stufe 2f — Prozesstests, stdin, voller Paritätslauf**
@@ -257,8 +288,11 @@ systemd ist stdin `/dev/null`, sonst beendet sich der Dienst sofort und
 
 Proof:
 ```
-cargo test --manifest-path bridge-rs/Cargo.toml 2>&1 | tail -1   # ⇒ 0 failed
-bash scripts/parity.sh --impl rust --check; echo $?              # ⇒ 7/7, 0
+cargo test --manifest-path bridge-rs/Cargo.toml -- --test-threads=1 2>&1 | tail -1   # ⇒ 0 failed
+# `--test-threads=1` ist Pflicht, sobald echte Bridges auf den reservierten Ports
+# starten: `cargo test` fährt Fälle einer Datei parallel, die Node-Suite läuft aus
+# genau diesem Grund mit `--test-concurrency=1`.
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check; echo $?              # ⇒ 7/7, 0
 ```
 
 **Stufe 3 — Windows**
@@ -272,7 +306,7 @@ Dateien: `src/platform/windows.rs` (`GetExtendedTcpTable` → PID →
 Proof:
 ```
 cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-pc-windows-gnu; echo $?   # ⇒ 0
-cargo clippy --manifest-path bridge-rs/Cargo.toml --target x86_64-pc-windows-gnu -- -D warnings; echo $?   # ⇒ 0
+cargo clippy --manifest-path bridge-rs/Cargo.toml --target x86_64-pc-windows-gnu --all-targets -- -D warnings; echo $?   # ⇒ 0
 file -b bridge-rs/target/x86_64-pc-windows-gnu/release/browser-control-bridge.exe   # ⇒ "PE32+ … (console) x86-64"
 ```
 
@@ -290,15 +324,16 @@ aufgeweicht; `--fix-path` entfällt), `test/deploy.test.js`,
 `test/install.test.js` (Sandbox legt nur noch `home/browser-control/` an, nicht
 mehr `…/bridge/bridge.mjs`; zwei neue Fälle
 `install_copiesTheBinaryToLocalBin`, `install_withMissingBinary_abortsBeforeWriting`;
-`install_withOldNode_abortsBeforeWriting` und
-`install_fixPathWritesTheDropInOnlyWhenNeeded` werden **an Ort und Stelle**
-umgeschrieben und behalten ihr `install_`-Präfix), **`docs/35` wird hier
+`install_withOldNode_abortsBeforeWriting` wird umgeschrieben,
+`install_fixPathWritesTheDropInOnlyWhenNeeded` **entfällt ersatzlos** (das Flag
+gibt es nicht mehr — einen Test zu behalten, der ein gelöschtes Flag behauptet,
+nur damit eine Zahl hält, ist Selbstbetrug); die Zahl **31** = 20 verbleibende `install_`-Fälle + 2 neue + 9 Unit-/`ExecStart`-Fälle), **`docs/35` wird hier
 nachgezogen** (`docs/README.md`: die Stufe, die das Verhalten ändert).
 `docs/18` bleibt bis 4b unangetastet.
 
 Proof:
 ```
-node --test --test-reporter=tap test/deploy.test.js test/install.test.js 2>&1 | grep -cE '^ok [0-9]+ - (install_|browserControlService_|execStart_)'   # ⇒ 32
+node --test --test-reporter=tap test/deploy.test.js test/install.test.js 2>&1 | grep -cE '^ok [0-9]+ - (install_|browserControlService_|execStart_)'   # ⇒ 31 (20 install_ nach dem Wegfall des fixPath-Falls + 2 neue + 9 Unit-/ExecStart-Fälle)
 grep -c 'ExecStart=%h/.local/bin/browser-control-bridge --http' deploy/browser-control.service   # ⇒ 1
 grep -c 'bridge/bridge.mjs' scripts/install.sh                                                   # ⇒ 0
 bash -n scripts/install.sh; echo $?
@@ -307,11 +342,20 @@ bash -n scripts/install.sh; echo $?
 **Stufe 4b — der Schnitt**
 
 Löschen: `bridge/` (8 Dateien), die zehn Node-Bridge-Testdateien, `test/ports.js`.
+**`--impl node`, `--record` und `node,node` verlieren ihr Subjekt:** `scripts/parity.sh`
+und `scripts/parity/driver.mjs` werden angepasst, sodass `--impl node` mit
+„keine Node-Bridge mehr — die sieben Artefakte sind eingefroren" und Exit `1`
+antwortet, statt ein fehlendes Skript zu spawnen. Die Artefakte bleiben der
+Maßstab; nur ihr Erzeuger ist weg.
 Ändern: `test/extension.test.js` (der `loadConfig`-Import wird zu den Literalen
-`127.0.0.1`/`8110` plus Drift-Satz), `docs/18` (Amendments; der
-Amendments-Abschnitt von `docs/35` wird **entfernt**), `docs/30` und
-`INSTALL.md` (Task-Scheduler-Weg; Node nur noch für Tests), `CONTRIBUTING.md`
-(`cargo test` in der Abnahme).
+`127.0.0.1`/`8110` plus Drift-Satz), `docs/18` und `docs/29` (Amendments aus der
+Tabelle unten), `docs/30` und `INSTALL.md` (Task-Scheduler-Weg; Node nur noch für
+Tests), `CONTRIBUTING.md` (`cargo test` in der Abnahme), `scripts/parity.sh` +
+`scripts/parity/driver.mjs` (`--impl node` ⇒ laute Meldung), `scripts/install.sh`
+(die zwei `bridge/`-Kommentare und `pkill -f bridge.mjs`), **und die Specs
+abschließen** (`CONTRIBUTING.md`, Schritt 7): `docs/38` und `docs/37` auf
+`status: active`, den eigenen `## Amendments`-Abschnitt von `docs/38` entfernen,
+`docs/README.md` (zwei Status-Zellen), `docs/PROJECT-STATE.md`.
 
 Proof:
 ```
@@ -319,7 +363,7 @@ test -d bridge && echo present || echo gone                 # ⇒ "gone"
 git log --diff-filter=D --oneline -- bridge/ | wc -l        # ⇒ 1
 npm test 2>&1 | grep -E '^# (tests|fail|cancelled|skipped)'  # ⇒ fail/cancelled = 0
 cargo test --manifest-path bridge-rs/Cargo.toml 2>&1 | tail -1
-bash scripts/parity.sh --impl rust --check; echo $?         # ⇒ 7/7, 0
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check; echo $?         # ⇒ 7/7, 0
 grep -rnE 'bridge/config\.mjs|bridge/bridge\.mjs|bridge\.mjs' test/ scripts/ deploy/ package.json   # ⇒ keine Ausgabe
 ```
 
@@ -342,6 +386,10 @@ grep -rnE 'bridge/config\.mjs|bridge/bridge\.mjs|bridge\.mjs' test/ scripts/ dep
 - **`~/.local/bin` ist ein neuer Schreibort** — ohne Pfadwächter-Eintrag bricht
   `install_writesOnlyUnderHome`.
 - **`BC_BIND=127.0.0.1:0` bleibt eine stille Lüge** — portieren, nicht beheben.
+- **Rust-Testnamen sind nicht snake_case** (sie tragen die Node-Namen, damit die
+  Zuordnung ablesbar bleibt). `clippy --all-targets -- -D warnings` würde daran
+  scheitern ⇒ `#![allow(non_snake_case)]` in den Test-Crates, bewusst und
+  kommentiert.
 - **Lone surrogates** nimmt Node, `serde_json` nicht — benannte Lücke, kein
   Blocker.
 
@@ -371,7 +419,12 @@ Unberührt bis 4a: `docs/18`, `deploy/browser-control.service`; unberührt bis 4
 | `docs/35-…` | `## Bekannte Lücken` | zwei Schreiborte | dazu `~/.local/bin` | 4a |
 | `docs/30-…` | Windows-Betrieb | `node bridge/bridge.mjs` | `browser-control-bridge.exe`, Task-Scheduler-Aufgabe | 4b |
 | `INSTALL.md`, `CONTRIBUTING.md` | Prerequisites/Abnahme | „Node ≥ 22" als Betriebsvoraussetzung | Node nur für Tests/Parity; `cargo test` in der Abnahme | 4b |
+| `docs/30-…` | `## Non-goals` | „Kein Dienst-Ersatz und kein Autostart. Task Scheduler, NSSM, WinSW sind Teil 2" und „**Keine** Windows-Implementierung von `port-owner`" | beides ist mit Stufe 3 **gebaut**: `GetExtendedTcpTable` und die Task-Scheduler-Aufgabe — die Zeilen werden zu „erledigt durch `docs/38`" | 4b |
+| `docs/29-…` | `## Acceptance criteria` | `npm run --silent check` ⇒ `checked 28 files` | die Zahl wird in 4b **gemessen** eingetragen (heute 33, nach dem Schnitt kleiner) — eine gepinnte Zahl, die der Schnitt verschiebt, ist ohne Nachtrag falsch | 4b |
+| `docs/18-…` | `## Testing`, Kriterium 1, Kriterium 2b | vier Zeilen auf gelöschte Testdateien, „die 373 bestehenden Fälle", Porttabelle | Zeilen auf die Rust-Tests umgestellt, Fallzahl gemessen, Porttabelle auf `tests/ports.rs` | 4b |
+| `docs/35-…` | `## Testing`, `## Acceptance criteria` | die zwei Fälle, die 4a umschreibt, und `check_node_version` | `check_binary`/`install_binary`; der `fixPath`-Fall entfällt, die Zahl wird neu gemessen | 4a |
 | `docs/ROADMAP.md` | Zeilen 23/24, 26–28 | Signierung setzt MV3 voraus | unverändert — der Port berührt die Signatur nicht | — |
+| `docs/ROADMAP.md` | Zeile 31 | „den Dienst **optional** einrichten … Task Scheduler oder NSSM" | der Task-Scheduler-Weg ist mit Stufe 3 **entschieden** (ohne NSSM); die Zeile wird entsprechend umformuliert | 4b |
 
 ## Bekannte Lücken
 
@@ -406,10 +459,16 @@ nennt **kein** `.cargo/config.toml` mehr, die 2f-Begründung „Node-Seite gibt 
 nicht mehr" ist nach 4b gewandert, und die beiden `install_`-Fälle, die 4a
 umschreibt, behalten ihr Präfix (Zahl **32** hält).
 
-### Runde 4 — steht aus
+### Runde 1 dieses Dokuments — 2026-11-16, `grizzled-senior-dev`: 🔧
 
-Teil 2 geht durch das Gate, sobald Teil 1 gebaut ist — vorher ist sein Maßstab
-nur Papier.
+Neun Blocker, vierzehn Major. **Alle übernommen** (`## Log`). Die Zählung beginnt
+mit der Teilung neu (`docs/37`); die Runden 1–3 der gemeinsamen Fassung stehen
+dort als Vorgeschichte.
+
+### Runde 2 — steht aus
+
+Teil 2 geht erst weiter, wenn diese Runde abgearbeitet ist; gebaut wird nach
+`CONTRIBUTING.md`, Schritt 6.
 
 ## Log
 
@@ -417,7 +476,21 @@ nur Papier.
   x86_64.
 - **2026-11-16, Teilung:** nach dem dritten Block in „Maßstab" (`docs/37`) und
   „Port" (dieser Teil) getrennt.
-- **Aus Runde 1–3 übernommen:** `## Dependency changes` mit sechs Crates;
+- **Runde 1 dieses Dokuments (2026-11-16) — Neun Blocker übernommen:**
+  Release-Build vor jedem `--impl rust`-Lauf (B1); `sha2` + `subtle` für den
+  Tokenvergleich (B2); `hyper-util` und hyper-Features (B3); die 16 in
+  `tests/http.rs` hergeleitet (14 + 2) (B4); `--test-threads=1` für die
+  Prozessfälle (B5); 4b nimmt `scripts/parity*` auf und schafft `--impl node` ab
+  (B6); 4b schließt die Specs ab (B7); Amendments für `docs/29`, `docs/18` und
+  `docs/35` (B8); `docs/30`-Non-Goals und Roadmap-Zeile 31 (B9).
+- **Runde 1 — Major übernommen:** `|| echo gone` in Kriterium 6;
+  `grep -Eq` für `file`; `BC_TOKEN_FILE` im `curl`-Beweis; `# tests N` in 4b;
+  Clippy mit `--all-targets` und `allow(non_snake_case)`; `Cargo.lock` existiert
+  seit Stufe 1; tokio-Features `io-std`/`process` und `windows-sys`-Features;
+  `BRIDGE_VERSION` und der `welcome`-Frame gepinnt; `toISOString()` in 2a;
+  der `fixPath`-Test **entfällt** statt umbenannt; Rundenzählung neu;
+  4b entfernt den Amendments-Abschnitt von `docs/38` (nicht von `docs/35`).
+- **Aus Runde 1–3 der gemeinsamen Fassung:** `## Dependency changes` mit Crates;
   eigene Abhängigkeiten in 2a/2b/2d/2e/3 statt einer Sammelzeile; kein
   `.cargo/config.toml`; Zahlen statt „≥" (16 in 2e, 32 in 4a); `--check` in
   jedem Parity-Beweis; `docs/35` in 4a, `docs/18` in 4b; `git log

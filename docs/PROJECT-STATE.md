@@ -34,7 +34,15 @@ Spurweg, nicht im Mitschnitt): fehlender `defaultCaptionTrackIndex` (ein
 Track ⇒ Original; mehrere einer Sprache ⇒ manuell vor ASR), `>>`-Suffix am
 Menüeintrag, und der Paar-Eintrag in der Gegenprobe der Menüzahl.
 
-**Teststand:** 760 Tests grün, `npm run check` 0.
+**Teststand:** 764 Tests grün, `npm run check` 0 (33 Dateien).
+
+**Rust-Port (seit 2026-11-16):** `docs/37` (Teil 1) ist `active` und **gebaut** —
+die Toolchain steht (rustc 1.100.0, clippy, mingw GCC 13), `bridge-rs/` baut
+statisch für `x86_64-unknown-linux-musl` (542 KB) und `x86_64-pc-windows-gnu`
+(`PE32+`, 1,2 MB), und `scripts/parity.sh` misst gegen **sieben eingecheckte
+Soll-Artefakte** (`--check` 7/7, `node,node` identisch, `--self-test` 7/7 rot).
+`docs/38` (Teil 2, der Port) ist `proposed`; seine Runde-1-Befunde sind
+eingearbeitet, gebaut ist dort noch nichts.
 
 **Seit 2026-11-15 veröffentlicht:** `v0.1.0` (erste Quellenmarke), `v0.2.0`
 (`scripts/install.sh`), `v0.3.0` (Standard-Endpunkt), `v0.4.0`.

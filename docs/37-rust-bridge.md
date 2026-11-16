@@ -1,6 +1,6 @@
 ---
 description: Teil 1 des Rust-Projekts — Werkzeugkette, eine baubare Gerüst-Binary für Linux und Windows und der Paritätsmaßstab (sieben Vergleiche gegen eingecheckte Soll-Artefakte, Selbsttest 7/7), bevor eine Zeile Bridge portiert wird.
-status: proposed
+status: active
 ---
 
 # Die Rust-Bridge, Teil 1: Werkzeugkette und Paritätsmaßstab
@@ -313,7 +313,16 @@ Token je Lauf, Ports `18115`/`18116`, `file`-Muster als Teilprüfung, ein
 Kommando für Kriterium 6, eine Formulierung für `node,node`, der Linux-Satz und
 `## Additional dependencies`.
 
-### Runde 2 — steht aus
+### Runde 2 — 2026-11-16: `✅ Ship it` (Bedingung erfüllt)
+
+Der Reviewer hatte festgehalten: die zwei Restzeilen sind Textarbeit, keine
+Neuplanung; danach ist das Dokument baubar. Beide sind geändert (Portleichen in
+`docs/37` durch `18115`/`18116`, `test/ports.js` in der Ausnahme von Kriterium 6),
+dazu musl-Lizenz und ein Kommando für „kein `--version`". **Gebaut und
+abgenommen am 2026-11-16:** Stufe 0 (Toolchain), Stufe 1 (Gerüst, beide Ziele
+bauen: `static-pie` 542 488 Bytes, `PE32+` 1 224 571 Bytes) und Stufe 2
+(Paritätsmaßstab: sieben Artefakte, `--check` 7/7, `node,node` identisch,
+`--self-test` 7/7 rot, drei Mutationsproben).
 
 ## Log
 
