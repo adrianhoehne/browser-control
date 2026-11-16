@@ -60,7 +60,7 @@ Werkzeugkette (kein Repo-Paket, keine Laufzeitabhängigkeit des Produkts):
 | Werkzeug | Version | Lizenz | Zweck |
 |---|---|---|---|
 | `rustup` / `rustc` | **stable**, Datum des `rustup toolchain install` im `## Log` | MIT / Apache-2.0 | Compiler |
-| Ziel `x86_64-unknown-linux-musl` | zur Toolchain gehörig | — | statisches Linux-Binary |
+| Ziel `x86_64-unknown-linux-musl` | zur Toolchain gehörig | MIT (musl-libc landet im Binary) | statisches Linux-Binary |
 | Ziel `x86_64-pc-windows-gnu` | zur Toolchain gehörig | — | Windows-Binary |
 | `clippy` (rustup component) | zur Toolchain gehörig | MIT / Apache-2.0 | Lints (Teil 2) |
 | `gcc-mingw-w64-x86-64` | Distributionspaket, Version im `## Log` | GPL-3+ mit GCC-Runtime-Ausnahme | **nur Linker**, kein Code im Produkt |
@@ -146,8 +146,9 @@ Richtigkeit.
 5. **Der Maßstab ist deterministisch.** Beweis:
    `bash scripts/parity.sh --impl node,node` ⇒ „1..7 identisch", Exit 0.
 6. **`bridge/` ist unangetastet.** Beweis: `test -d bridge && echo present` ⇒
-   `present`; `git status --porcelain | grep -vE '^(.. )?(bridge-rs/|scripts/parity|docs/)'`
-   ⇒ keine Ausgabe, Exit 1.
+   `present`; `git status --porcelain | grep -vE '^(.. )?(bridge-rs/|scripts/parity|docs/|test/ports\.js)'`
+   ⇒ keine Ausgabe, Exit 1. (`test/ports.js` ist die **eine** erlaubte
+   Testdatei — der Parity-Lauf trägt dort seine zwei Ports ein.)
 7. **Die 764 Node-Tests laufen weiter.** Beweis: `npm test` ⇒ `# fail 0`,
    `# cancelled 0`, `# skipped 0`; `npm run check` ⇒ 0.
 8. **Kein Geheimnis.** Beweis:
@@ -170,7 +171,9 @@ jede Windows-Proof-Zeile dorthin, und das steht in `## Bekannte Lücken`.
 — Teil 2, Stufe 4a, installiert genau diesen Pfad; **keine** Abhängigkeiten),
 `bridge-rs/.gitignore` mit `/target`, `bridge-rs/README.md` (Toolchain,
 Cross-Linker, Zielbefehle), `bridge-rs/src/main.rs` ohne Verhalten: **keine** Optionen, keine Ausgabe —
-`--version` gibt es nicht, `SERVER_INFO` bleibt in Teil 2 fest auf `0.1.0`. **Kein** `.cargo/config.toml`: Cargo liest Konfiguration ab dem
+`--version` gibt es nicht (`bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge
+--version; echo $?` ⇒ **keine Ausgabe, Exit 0**), `SERVER_INFO` bleibt in Teil 2
+fest auf `0.1.0`. **Kein** `.cargo/config.toml`: Cargo liest Konfiguration ab dem
 Arbeitsverzeichnis, ein `[build] target` im Unterordner greift bei
 `--manifest-path` aus der Wurzel nicht — `--target` steht deshalb in jedem
 Befehl.
@@ -266,7 +269,7 @@ laufen, aber nicht vor 0 (die Ports und die Fixture sind unabhängig).
 Teil 2 (`docs/38-rust-port.md`) erbt: die Werkzeugkette, das baubare Gerüst, den
 Maßstab mit sieben eingecheckten Artefakten, `--record`/`--check`/`--self-test`,
 den Grundsatz „eine Datei je Vergleich, Zeitstempel gestrichen", und die
-Tatsache, dass die Ports `18140`/`18141` dem Parity-Lauf gehören.
+Tatsache, dass die Ports `18115`/`18116` dem Parity-Lauf gehören.
 
 ## Bekannte Lücken
 
@@ -317,4 +320,4 @@ Kommando für Kriterium 6, eine Formulierung für `node,node`, der Linux-Satz un
 - **Aus Runde 1–3 übernommen in diesen Teil:** Soll-Artefakte statt rein
   differentiellem Vergleich; `--self-test` mit 7 Proben; `--check` in jedem
   Beweis; keine `.cargo/config.toml` (`--target` in jedem Befehl); Ports
-  `18140`/`18141`; `git ls-files` statt `git status` für eingecheckte Artefakte.
+  `18115`/`18116`; `git ls-files` statt `git status` für eingecheckte Artefakte.
