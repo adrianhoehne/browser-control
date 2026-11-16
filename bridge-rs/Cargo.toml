@@ -1,0 +1,12 @@
+[package]
+name = "browser-control-bridge"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Stage 4a of docs/38 installs exactly this binary name; keep it stable.
+[[bin]]
+name = "browser-control-bridge"
+path = "src/main.rs"
+
+[dependencies]
