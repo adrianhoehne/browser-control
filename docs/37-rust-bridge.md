@@ -569,7 +569,7 @@ test -d bridge && echo present || echo gone                 # ⇒ "gone" (vorher
 git log --diff-filter=D --oneline -- bridge/ | wc -l        # ⇒ 1 (der Lösch-Commit; ohne --diff-filter zählt der Anlage-Commit mit)
 npm test 2>&1 | grep -E '^# (tests|fail|cancelled|skipped)'  # ⇒ fail/cancelled = 0
 cargo test --manifest-path bridge-rs/Cargo.toml 2>&1 | tail -1
-bash scripts/parity.sh; echo $?                            # ⇒ 7/7, 0
+bash scripts/parity.sh --impl rust --check; echo $?         # ⇒ 7/7 wie erwartet, 0
 grep -rnE 'bridge/config\.mjs|bridge/bridge\.mjs|bridge\.mjs' test/ scripts/ deploy/ package.json   # ⇒ keine Ausgabe
 ```
 
