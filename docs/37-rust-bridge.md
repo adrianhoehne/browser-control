@@ -43,12 +43,30 @@ wertlos macht.
 - **Keine Abhängigkeiten im Gerüst.** `Cargo.toml` bleibt leer bis Teil 2.
 - **Kein Windows-Dienst, kein Installer, keine Amendments.** Alles Teil 2.
 - **Kein macOS, kein arm64.**
+- **Abnahme auf Linux.** Teil 1 wird auf bigdelli abgenommen (`find`, `file`,
+  `bash`, `command -v`). Die Plattformregel aus `docs/29` betrifft die
+  Node-Suite und bleibt unberührt.
 
 ## Die Entscheidungen des Betreibers (2026-11-16)
 
 Rust als **Ersatz** (nicht Parallelbetrieb auf Dauer), paralleler Aufbau mit
 Löschung erst nach Parität, Zielplattformen **Linux und Windows x86_64**.
 Teil 1 setzt davon nur den Maßstab um.
+
+## Additional dependencies
+
+Werkzeugkette (kein Repo-Paket, keine Laufzeitabhängigkeit des Produkts):
+
+| Werkzeug | Version | Lizenz | Zweck |
+|---|---|---|---|
+| `rustup` / `rustc` | **stable**, Datum des `rustup toolchain install` im `## Log` | MIT / Apache-2.0 | Compiler |
+| Ziel `x86_64-unknown-linux-musl` | zur Toolchain gehörig | — | statisches Linux-Binary |
+| Ziel `x86_64-pc-windows-gnu` | zur Toolchain gehörig | — | Windows-Binary |
+| `clippy` (rustup component) | zur Toolchain gehörig | MIT / Apache-2.0 | Lints (Teil 2) |
+| `gcc-mingw-w64-x86-64` | Distributionspaket, Version im `## Log` | GPL-3+ mit GCC-Runtime-Ausnahme | **nur Linker**, kein Code im Produkt |
+
+Crates kommen erst in Teil 2 (`docs/38`, `## Dependency changes`); Teil 1 baut
+ohne Abhängigkeiten.
 
 ## Was verglichen wird
 
@@ -65,11 +83,22 @@ Sieben Vergleiche, aus dem Bridge-Verhalten gelesen (Details in `docs/38`,
 | 6 | 1 | fehlende Tokendatei ⇒ Exit `2` mit derselben Zeile |
 | 7 | 3 | Logzeilenfolge ohne Zeitstempel (`BC_LOG=info`, `debug`, `debug --http`) |
 
-**Eine Datei je Vergleich** (`scripts/parity/expected/<nr>-<name>.txt`) — sie
-enthält die Antworten und Ausgaben des Vergleichs, nicht je Fall eine eigene
-Datei. **Eine benannte Ausnahme:** das Zeitstempelpräfix
-`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z ` wird vor dem Vergleich
-gestrichen — dasselbe Muster, das `test/bridge.test.js` schon benutzt.
+**Eine Datei je Vergleich** (`scripts/parity/expected/<nr>-<name>.txt`), mit
+einer Kopfzeile `# cases=<n>` — die Fallzahl steht sonst nirgends und ein halb
+leeres Artefakt wäre grün.
+
+**Vor dem Vergleich wird gestrichen** — an **allen vier** Stellen (`--record`,
+`--check`, `--self-test`, `node,node`), sonst ist die Maskierung wirkungslos:
+
+| Was | Muster | Warum |
+|---|---|---|
+| Zeitstempelpräfix | `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z ` | derselbe Regex wie `test/bridge.test.js` |
+| Portbesitzer | `owner pid=\d+ name=\S+` → `owner pid=<pid> name=<name>` | PID ist je Lauf anders, der Name versionsabhängig (Node 22 `node`, Node 24 `MainThread`) |
+| Laufverzeichnis | der `mktemp`-Pfad → `<run>` | Vergleich 6 enthält den Tokenpfad |
+
+Nach der Maskierung misst Vergleich 5 nur **Exit `1` und die Satzform**, nicht
+den Besitzer; Vergleich 6 nur Satz und Code, nicht den Pfad. Das steht hier,
+damit niemand später Parität behauptet, wo nur die Form geprüft wird.
 
 **Warum nicht rein differentiell:** „Node gegen Rust" ist grün, wenn **beide**
 dasselbe Falsche tun — zweimal kein Close-Frame, zweimal Exit `0`, zweimal leere
@@ -82,7 +111,7 @@ Richtigkeit.
 |---|---|---|
 | `scripts/parity.sh` | `--impl node --record`, dann `git status scripts/parity/expected` | sieben Soll-Artefakte entstehen und liegen im Baum |
 | `scripts/parity.sh` | `--impl node --check` ⇒ 7/7 | der Maßstab beschreibt den heutigen Code |
-| `scripts/parity.sh` | `--impl node,node` ⇒ 7/7 | der Lauf ist deterministisch (kein Zufall im Vergleich) |
+| `scripts/parity.sh` | `--impl node,node` — Ausgabe wie in Kriterium 5 | der Lauf ist deterministisch (kein Zufall im Vergleich) |
 | `scripts/parity.sh` | `--self-test` ⇒ 7/7 | **jeder** der sieben Vergleiche kann fehlschlagen |
 | `scripts/parity.sh` | `--only 5,6` | die Auswahl läuft, die anderen bleiben ungeprüft |
 | `cargo build … --target x86_64-unknown-linux-musl` | Exit 0 | das Gerüst baut für Linux |
@@ -95,23 +124,30 @@ Richtigkeit.
    ⇒ **2**; `command -v x86_64-w64-mingw32-gcc` ⇒ Pfad.
 2. **Das Gerüst baut für beide Ziele.** Beweis:
    `cargo build --release --manifest-path bridge-rs/Cargo.toml --target
-   x86_64-unknown-linux-musl` ⇒ 0; `find
-   bridge-rs/target/x86_64-unknown-linux-musl/release -maxdepth 1 -type f
-   -executable | wc -l` ⇒ **1**; `cargo build --release --manifest-path
-   bridge-rs/Cargo.toml --target x86_64-pc-windows-gnu` ⇒ 0 und `file -b
-   bridge-rs/target/x86_64-pc-windows-gnu/release/browser-control-bridge.exe`
-   ⇒ `PE32+ executable (console) x86-64`.
-3. **Der Maßstab ist eingecheckt.** Beweis:
-   `git ls-files scripts/parity/expected | wc -l` ⇒ **7**;
-   `bash scripts/parity.sh --impl node --check` ⇒ „7/7 wie erwartet", Exit 0.
+   x86_64-unknown-linux-musl` ⇒ 0;
+   `test -x bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge
+   && echo present` ⇒ `present`;
+   `file -b …/release/browser-control-bridge | grep -Eq 'statically linked|static-pie linked'`
+   ⇒ 0; `cargo build --release --manifest-path bridge-rs/Cargo.toml --target
+   x86_64-pc-windows-gnu` ⇒ 0 und
+   `file -b bridge-rs/target/x86_64-pc-windows-gnu/release/browser-control-bridge.exe
+   | grep -q 'PE32+ executable (console) x86-64'` ⇒ 0 (Teilprüfung, nicht
+   Gleichheit — `file` hängt Abschnittszahl und Suffix an).
+3. **Der Maßstab ist eingecheckt und vollständig.** Beweis (für den Umsetzer —
+   `git ls-files` ist erst nach dem Commit grün, und der Umsetzer committet
+   nicht): `ls -1 scripts/parity/expected/*.txt | wc -l` ⇒ **7**;
+   `grep -h '^# cases=' scripts/parity/expected/*.txt | cut -d= -f2 | tr '\n' ' '`
+   ⇒ `2 39 2 2 1 1 3 `; `bash scripts/parity.sh --impl node --check` ⇒ „7/7 wie
+   erwartet", Exit 0. Der Orchestrator prüft nach dem Commit zusätzlich
+   `git ls-files scripts/parity/expected | wc -l` ⇒ 7.
 4. **Der Maßstab ist falsifizierbar.** Beweis:
    `bash scripts/parity.sh --self-test` ⇒ „7/7 rot wie erwartet", Exit 0 —
    **sieben** Proben für **sieben** Vergleiche.
 5. **Der Maßstab ist deterministisch.** Beweis:
    `bash scripts/parity.sh --impl node,node` ⇒ „1..7 identisch", Exit 0.
 6. **`bridge/` ist unangetastet.** Beweis: `test -d bridge && echo present` ⇒
-   `present`; `git status --porcelain` nennt nur `bridge-rs/`,
-   `scripts/parity*`, `docs/…`.
+   `present`; `git status --porcelain | grep -vE '^(.. )?(bridge-rs/|scripts/parity|docs/)'`
+   ⇒ keine Ausgabe, Exit 1.
 7. **Die 764 Node-Tests laufen weiter.** Beweis: `npm test` ⇒ `# fail 0`,
    `# cancelled 0`, `# skipped 0`; `npm run check` ⇒ 0.
 8. **Kein Geheimnis.** Beweis:
@@ -130,10 +166,11 @@ jede Windows-Proof-Zeile dorthin, und das steht in `## Bekannte Lücken`.
 
 **Stufe 1 — Gerüst, das für beide Ziele baut** (Umsetzer)
 
-`bridge-rs/Cargo.toml` (ein `[[bin]]`, **keine** Abhängigkeiten),
+`bridge-rs/Cargo.toml` (Paket und `[[bin]]` heißen **`browser-control-bridge`**
+— Teil 2, Stufe 4a, installiert genau diesen Pfad; **keine** Abhängigkeiten),
 `bridge-rs/.gitignore` mit `/target`, `bridge-rs/README.md` (Toolchain,
-Cross-Linker, Zielbefehle), `bridge-rs/src/main.rs` ohne Verhalten (gibt
-`--version`?). **Kein** `.cargo/config.toml`: Cargo liest Konfiguration ab dem
+Cross-Linker, Zielbefehle), `bridge-rs/src/main.rs` ohne Verhalten: **keine** Optionen, keine Ausgabe —
+`--version` gibt es nicht, `SERVER_INFO` bleibt in Teil 2 fest auf `0.1.0`. **Kein** `.cargo/config.toml`: Cargo liest Konfiguration ab dem
 Arbeitsverzeichnis, ein `[build] target` im Unterordner greift bei
 `--manifest-path` aus der Wurzel nicht — `--target` steht deshalb in jedem
 Befehl.
@@ -159,9 +196,30 @@ Jedes Paar läuft **nacheinander auf demselben Port, mit derselben Tokendatei un
 demselben Fixture-Env**; die Soll-Artefakte entstehen per `--record` und werden
 **eingecheckt**. Laufzeitartefakte gehen nach `mktemp -d`, nie in den Baum.
 
+Die Umgebung wird **gepinnt**, damit der Lauf nicht die Vorgaben der Bridge erbt
+(`BC_CALL_TIMEOUT_MS` steht dort auf 20 s, `BC_HELLO_TIMEOUT_MS` auf 5 s — ein
+Vergleich, der schweigt, wartete sonst 20 s):
+
+```
+BC_CALL_TIMEOUT_MS=300  BC_HELLO_TIMEOUT_MS=300
+BC_LOG=info             (bzw. debug für Vergleich 7)
+BC_BIND=127.0.0.1:18115 BC_HTTP_PORT=18116
+BC_TOKEN_FILE=<mktemp>/token
+```
+
 Optionen: `--record` (schreibt die sieben Artefakte, nur mit `--impl node`),
 `--check` (misst gegen sie), `--impl node|rust|node,node`, `--only 5,6`,
 `--keep`, `--self-test` (mutiert je Vergleich eines der sieben Artefakte).
+
+**`--impl rust` startet**
+`bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge`;
+fehlt die Datei, bricht der Lauf mit Exit `1` und `rust binary missing: <pfad>`
+ab — **gebaut wird nie** von `parity.sh`.
+
+**Der Token wird je Lauf erzeugt** (`randomBytes(16).toString('hex')`), liegt nur
+im `mktemp`-Verzeichnis und steht in **keinem** Artefakt; Vergleich 4 hält nur
+`code=4401`/`code=4408` fest. Ein eingecheckter Token wäre ein Treffer für den
+Secret-Grep der Abnahme.
 
 Proof:
 ```
@@ -183,8 +241,13 @@ npm run check; echo $?                                        # ⇒ 0 (die .mjs-
 - **Die Artefakte sind handgepflegt.** Wer sie von Hand ändert, ändert den
   Maßstab. `--record` überschreibt sie nur aus der Node-Bridge und nur
   absichtlich; der Commit, der sie ändert, gehört in den `## Log`.
-- **Die Ports.** Node behält `18110`–`18114`, der Parity-Lauf nimmt
-  `18140`/`18141` — nie `8110`/`8111`, dort läuft der Dienst des Betreibers.
+- **Die Ports.** Node behält `18110`–`18114`; der Parity-Lauf nimmt
+  `18115`/`18116` und trägt sie in `test/ports.js` ein (der dokumentierte
+  Bereich ist `18110`–`18119`, ein Eintrag genügt), damit kein zweiter Lauf sie
+  gleichzeitig greift. `npm test` und `parity.sh` laufen deshalb **nicht
+  parallel**. Vor jedem Lauf eine Vorflugprüfung: ist der Port belegt, bricht
+  der Lauf mit Exit `1` und „port busy" ab, statt den falschen Besitzer zu
+  messen; ein eigener Listener bleibt nie zurück.
 - **Zeitstempel.** Rust muss `toISOString()` exakt nachbilden (drei
   Millisekunden, `Z`), sonst greift der Strip nicht — Teil 2, aber der
   Maßstab muss es wissen.
@@ -221,16 +284,29 @@ x86_64; geteilt in zwei Teile nach dem dritten Block.
 
 ## Review
 
-### Runden 1–3 der gemeinsamen Fassung — 2026-11-16, `grizzled-senior-dev`
+### Vorgeschichte — die gemeinsame Fassung, drei Blöcke
 
 Die gemeinsame Fassung (Maßstab **und** Port in einem Dokument) wurde dreimal
 blockiert: Runde 1 `🤔` (7 Blocker), Runde 2 `🔧` (8 Punkte), Runde 3 `🔧`
 (5 Punkte). Statt einer vierten Runde wurde **geteilt** (`CONTRIBUTING.md`,
-Schritt 4) — dieser Teil enthält nur den Maßstab und das Gerüst.
+Schritt 4). Diese Runden zählen **nicht** für dieses Dokument — mit der Teilung
+beginnt die Zählung neu.
 
-### Runde 4 — steht aus
+Ziel und Kriterien dieses Teils wurden am 2026-11-16 mit dem Betreiber
+abgesprochen („Ja, so bauen"), **bevor** der Dev-Plan geschrieben wurde.
 
-Teil 1 geht durch das Gate, sobald Ziel und Kriterien abgesprochen sind.
+### Runde 1 dieses Dokuments — 2026-11-16, `grizzled-senior-dev`: 🔧
+
+Sechs Blocker, neun Major. **Alle übernommen** (`## Log`): Maskentabelle statt
+„einer Ausnahme" (PID, Prozessname und Laufverzeichnis sind laufvariabel),
+`# cases=`-Kopfzeile und Fallzahlprüfung, `ls` statt `git ls-files` für den
+Umsetzer, Binärname `browser-control-bridge` festgelegt, das „`--version`?"-Frage
+entfernt, `--impl rust` mit Pfad und Abbruch definiert; dazu gepinnte Fristen,
+Token je Lauf, Ports `18115`/`18116`, `file`-Muster als Teilprüfung, ein
+Kommando für Kriterium 6, eine Formulierung für `node,node`, der Linux-Satz und
+`## Additional dependencies`.
+
+### Runde 2 — steht aus
 
 ## Log
 

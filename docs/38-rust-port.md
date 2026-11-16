@@ -135,9 +135,13 @@ Node-Suite nachgezogen.
 3. **Dieselben Logzeilen.** Beweis: Paritätsvergleich 7 grün, und
    `grep -rho 'listening on\|extension connected\|status windows=' bridge-rs/src
    | sort -u | wc -l` ⇒ **3**.
-4. **Die deutschen Sätze sind kopiert.** Beweis: Paritätsvergleich 2 grün.
-   **Eine benannte Ausnahme:** `BRIDGE_FAILED` ist nicht auslösbar und wird von
-   einem Rust-Unit-Test gepinnt.
+4. **Die deutschen Sätze sind kopiert — die in Vergleich 2 gemessenen.**
+   Beweis: Paritätsvergleich 2 grün. Er umfasst **13 × 3** Fälle (je Werkzeug
+   ein Fixture-Erfolg, ein `error:<code>` und die Argument-Verweigerung); die
+   Codes stehen in `bridge/mcp.mjs` (`TOOL_TEXTS`, `extensionFailureText`).
+   **Zwei benannte Ausnahmen:** `BRIDGE_FAILED` ist nicht auslösbar (Rust-Unit-
+   Test pinnt ihn), und Sätze, die nur bei einem Bridge-Bug entstehen,
+   erreicht der Vergleich nicht.
 5. **Windows ist gebaut.** Beweis:
    `cargo build --release --manifest-path bridge-rs/Cargo.toml --target
    x86_64-pc-windows-gnu` ⇒ 0; `cargo clippy … --target
@@ -151,7 +155,11 @@ Node-Suite nachgezogen.
    `grep -c 'ExecStart=%h/.local/bin/browser-control-bridge --http' deploy/browser-control.service`
    ⇒ **1**; `grep -c 'bridge/bridge.mjs' scripts/install.sh` ⇒ **0**;
    `node --test --test-reporter=tap test/deploy.test.js test/install.test.js |
-   grep -cE '^ok [0-9]+ - (install_|browserControlService_|execStart_)'` ⇒ **32**.
+   grep -cE '^ok [0-9]+ - (install_|browserControlService_|execStart_)'` ⇒ **32**;
+   und das Binary lauscht wirklich: `BC_BIND=127.0.0.1:18115
+   BC_HTTP_PORT=18116 ./browser-control-bridge --http &`, dann
+   `curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:18116/mcp`
+   ⇒ `401` (mit `-X POST`, weil die Reihenfolge Pfad → Methode → Token lautet).
 8. **Die 764 → kleineren Node-Tests bleiben grün.** Beweis: `npm test` ⇒
    `# fail 0`, `# cancelled 0`, `# skipped 0`; `npm run check` ⇒ 0.
 9. **Kein Produktcode außerhalb der Grenze.** Beweis: `git status --porcelain`
