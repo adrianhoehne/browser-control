@@ -42,7 +42,11 @@ const MCP_URL = `http://127.0.0.1:${BRIDGE_HTTP_PORT}/mcp`;
 
 /** Chosen, not measured: 15 × and 7 × the measured 4 s (`docs/40`, table). */
 const BRIDGE_UP_TIMEOUT_MS = 20_000;
-const CONNECT_TIMEOUT_MS = 60_000;
+const CONNECT_TIMEOUT_MS = 90_000;
+// `npx` downloads web-ext into its cache on the first run. On a fresh runner that
+// is tens of seconds of npm output — and it must not eat the connect deadline, so
+// the tool is warmed up before the clock starts.
+const WEB_EXT_WARMUP_TIMEOUT_MS = 300_000;
 const BEACON_TIMEOUT_MS = 30_000;
 const POLL_MS = 100;
 const STOP_GRACE_MS = 3_000;
@@ -272,6 +276,28 @@ function quoteForShell(value) {
   return /[\s"]/.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value;
 }
 
+/**
+ * Installs/verifies `web-ext` before anything is timed.
+ *
+ * The first `npx web-ext@8.9.0` on a clean runner spends its time in npm, not in
+ * Firefox; measured in CI on 2026-11-17: the connect window expired while npm was
+ * still printing deprecation warnings.
+ */
+function warmUpWebExt(logFile, windows) {
+  const result = spawnSync("npx", ["--yes", "web-ext@8.9.0", "--version"], {
+    shell: windows,
+    encoding: "utf8",
+    timeout: WEB_EXT_WARMUP_TIMEOUT_MS,
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  writeFileSync(logFile, `# warm-up\n${output}\n`);
+  if (result.status !== 0) {
+    fail(`web-ext is not usable (exit ${result.status ?? "?"}):\n${tail(output)}`);
+  }
+  const version = output.trim().split("\n").pop()?.trim() ?? "";
+  return version;
+}
+
 function startWebExt({ extensionDir, firefoxArgument, logFile, windows }) {
   const args = [
     "--yes",
@@ -491,6 +517,8 @@ async function main() {
       const firefoxArgument = windows
         ? firefox
         : writeFirefoxWrapper({ workDir, firefox, pidFile: firefoxPidFile });
+      const webExtVersion = warmUpWebExt(webExtLog, windows);
+      process.stdout.write(`e2e: web-ext ${webExtVersion} ready\n`);
       const webExt = startWebExt({ extensionDir, firefoxArgument, logFile: webExtLog, windows });
       cleanup.push(() => stopProcess({ name: "web-ext", pid: webExt.pid, windows, group: !windows }));
       if (!windows) {
