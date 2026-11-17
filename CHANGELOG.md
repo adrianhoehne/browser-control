@@ -5,6 +5,35 @@ Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+Nichts offen.
+
+## [0.5.0] — 2026-11-17
+
+**Die Bridge ist Rust.** Der Node-Prozess ist ersetzt durch ein statisch
+gelinktes Binary (`bridge-rs/`, 2,7 MB, musl), das ohne Node und ohne
+Interpreter startet. Der Umbau lief gegen einen **Paritätsmaßstab**: sieben
+Antworten der alten Node-Bridge wurden aufgezeichnet, die Rust-Fassung wird
+Zeichen für Zeichen dagegen gemessen — `scripts/parity.sh --impl rust --check`
+⇒ **7/7**, `--self-test` ⇒ 7/7 rot. Die Node-Bridge ist gelöscht.
+
+- **Gemessen statt behauptet:** `initialize`/`tools/list` byte-identisch
+  (7.390 Byte), alle dreizehn Werkzeuge über 15 Argumentformen (218 von 218
+  Antworten gleich), der Hub mit seinen 55 Fällen, WebSocket mit den
+  Close-Codes 4401/4408/4409, `POST /mcp` mit 401/404/405/413/500.
+- **Drei Fehler, die erst die Messung zeigte:** der WebSocket-Decoder war
+  quadratisch (70 888 ms gegen 193 ms bei 3,58 MB in einem Chunk); ein `hello`
+  im Handshake-Paket wurde nicht zugestellt und die Verbindung endete mit 4408
+  statt `welcome`; ein Panic in der Werkzeugschicht lieferte gar keine Antwort
+  statt 500 — und schrieb einen zeitstempellosen Block ins Journal.
+- **Betrieb:** `deploy/browser-control.service` startet
+  `%h/.local/bin/browser-control-bridge --http`; `scripts/install.sh` kopiert das
+  Binary und prüft es; `--fix-path` ist entfallen. Windows: dieselbe `.exe`, als
+  Task-Scheduler-Aufgabe (`deploy/windows/browser-control-bridge.xml`).
+- **Windows ist kompiliert, nicht gelaufen** — die Proben für den Betreiber
+  stehen in `bridge-rs/README.md`.
+- **492 Node-Fälle** (vorher 765: die 273 der gelöschten Bridge-Tests sind mit
+  ihrem Gegenstand entfallen), **283 Rust-Fälle**.
+
 **Die CI prüft jetzt, was ausgeliefert wird.** Vorher lief im Workflow nur
 `npm run check` und `npm test` — kein `cargo`, kein `parity.sh`, keine
 Installation. Jetzt gibt es fünf Jobs in einer Datei (`docs/40`).
