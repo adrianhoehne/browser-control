@@ -128,7 +128,7 @@ gibt** — das ist bei ihr erlaubt und sonst nicht. Die erste ist
 | `35-installationsskript.md` | Ein Installationsskript für die Server-Seite: Token, systemd-Unit, Dienststart und Prüfung in einem Befehl — idempotent, ohne Firefox-Automatisierung, ohne `sudo`; die vier Schritte in der Extension bleiben Handarbeit | `active` |
 | `36-standard-endpunkt.md` | Ein Standard-Endpunkt für die Extension: ein leeres Feld verbindet nach `ws://127.0.0.1:8110` (die Vorgabe der Bridge), sichtbar vorbelegt und änderbar; gespeicherte Endpunkte bleiben unberührt, keine Discovery. **`active`** seit 2026-11-15 | `active` |
 | `37-rust-bridge.md` | Die Rust-Bridge, **Teil 1**: Werkzeugkette, ein baubares Gerüst für Linux und Windows und der **Paritätsmaßstab** — sieben Vergleiche gegen eingecheckte Soll-Artefakte, Selbsttest 7/7, bevor eine Zeile portiert wird. Geteilt nach dem dritten Block des Spec-Gates | `active` |
-| `38-rust-port.md` | Die Rust-Bridge, **Teil 2**: die Module (Konstanten, Config, WebSocket, Hub, Werkzeuge, HTTP, stdio) gegen den Maßstab aus Teil 1, dann Windows, Installer und der Schnitt; Voraussetzung ist `docs/37` | `proposed` |
+| `38-rust-port.md` | Die Rust-Bridge, **Teil 2**: die Module (Konstanten, Config, WebSocket, Hub, Werkzeuge, HTTP, stdio) gegen den Maßstab aus Teil 1, dann Windows, Installer und der Schnitt — die Node-Bridge ist gelöscht, die sieben Artefakte sind eingefroren, Voraussetzung war `docs/37` | `active` |
 
 Meta-Datei dieses Ordners (`README.md`) trägt bewusst kein Frontmatter: sie ist
 Verfahren, keine Spec.

@@ -7,21 +7,23 @@
 # that both do the same wrong thing would be "identical" — that is why the
 # comparison has an expectation and is not merely differential.
 #
-#   --record     write the seven expected artefacts from the Node bridge
-#                (only with `--impl node`: the Rust side is what is measured,
-#                never the measure)
-#   --check      run an implementation and compare it with the artefacts
+#   --check      run the Rust bridge and compare it with the artefacts
 #   --self-test  mutate one artefact per comparison and require seven differences
-#   --impl       node | rust | node,node      (node,node = determinism proof)
-#   no mode      with `--impl a,b` the run compares the two runs against each
-#                other, never against the artefacts: the yardstick must not
-#                depend on luck. Any other `--impl` without a mode is a usage error.
+#   --impl       rust   (the only implementation that is left)
 #   --only 5,6   restrict the run to some comparisons; the rest stay unmeasured
 #   --keep       keep the mktemp run directory and name it
 #
+# **The Node bridge is gone.** It was deleted in the cut (`docs/38`, stage 4b), so
+# `--record`, `--impl node` and the pair `node,node` lost their subject: the seven
+# artefacts are frozen and only the Rust side is measured against them. All three
+# answer with `keine Node-Bridge mehr — die sieben Artefakte sind eingefroren;
+# gemessen wird mit --impl rust --check` and exit 1, instead of spawning a script
+# that no longer exists.
+#
 # **Do not run this at the same time as `npm test`.** The parity run owns ports
-# 18115 (extension listener) and 18116 (MCP over HTTP); `test/ports.js` reserves
-# them for exactly this file, and a concurrent suite would fight over them. The
+# 18115 (extension listener) and 18116 (MCP over HTTP); `npm test` used to reserve
+# them in `test/ports.js`, and since the cut they belong to this file alone — a
+# concurrent suite would still fight over them if it ever bound them again. The
 # check is not enforced, only documented — a "port busy" abort below is what an
 # overlap looks like.
 #
@@ -30,8 +32,8 @@
 # that compiles its own candidate measures the compiler as well.
 #
 # Run artefacts (token, probes, mutants) live in a `mktemp` directory that is
-# removed on exit. Only the seven files under `scripts/parity/expected/` are
-# written into the tree, and only by `--record`.
+# removed on exit. Nothing is written into the tree any more: the seven files under
+# `scripts/parity/expected/` are frozen, and `--check` only ever reads them.
 set -u -o pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -43,17 +45,17 @@ WS_PROBE="$PARITY/ws-probe.mjs"
 HOLD_PORT="$PARITY/hold-port.mjs"
 RUST_BIN="$ROOT/bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge"
 
-# The two ports this run owns. The documented test range is 18110–18119 and every
-# other number in it belongs to a test file (`test/ports.js`).
+# The two ports this run owns. They are the only numbers of the range 18110–18119
+# that anything still reserves: the Node test files that shared it are deleted with
+# the Node bridge (`test/ports.js` went with them).
 EXT_PORT=18115
 HTTP_PORT=18116
 BIND="127.0.0.1:$EXT_PORT"
 
 ALL_COMPARISONS=(1 2 3 4 5 6 7)
-# The case counts the artefacts must have, in comparison order. They are pinned
-# here as well as in the header line of each file, because a comparison that
-# silently recorded half its cases would otherwise be green.
-EXPECTED_CASE_COUNTS=(2 39 2 2 1 1 3)
+# The case counts are frozen in the `# cases=` header line of each artefact, and
+# `--check` compares that line like every other one. Nothing can record a short
+# comparison any more: recording is gone along with the Node bridge.
 
 declare -A NAMES=(
   [1]="initialize and tools/list"
@@ -123,45 +125,34 @@ while [ $# -gt 0 ]; do
 done
 
 MODE=${MODE:-}
-IMPL=${IMPL:-node}
+IMPL=${IMPL:-rust}
 ONLY=${ONLY:-}
 KEEP=${KEEP:-0}
 
+# One sentence, in the operator's language, for a state that is final: the Node
+# bridge was deleted (`docs/38`, stage 4b) and the seven artefacts are the record it
+# left behind. Recording is not "broken", it has no subject — so this is a loud
+# abort and not a fallback to the other implementation.
+NODE_BRIDGE_GONE="keine Node-Bridge mehr — die sieben Artefakte sind eingefroren; gemessen wird mit --impl rust --check"
+
 case "$IMPL" in
-  node|rust|node,node) ;;
-  *) fail "unknown --impl $IMPL (node, rust or node,node)" ;;
+  rust) ;;
+  node|node,node|node,rust|rust,node) fail "$NODE_BRIDGE_GONE" ;;
+  *) fail "unbekanntes --impl $IMPL — die Node-Bridge ist gelöscht, übrig ist nur 'rust'" ;;
 esac
 
-# A pair of implementations is its own mode, because the question it answers is a
-# different one: not "does it match the record" but "do two runs of the same code
-# agree". Modes and pairs do not mix — `--check` against `node,node` would have to
-# pick one side of the pair, and picking silently is how a proof turns into a
-# coin flip.
-PAIR=0
-case "$IMPL" in
-  *,*) PAIR=1 ;;
-esac
-
-if [ -z "$MODE" ]; then
-  if [ "$PAIR" -eq 1 ]; then
-    MODE=pair
-  else
-    usage >&2
-    fail "one of --record, --check or --self-test is required (or --impl a,b for the determinism proof)"
-  fi
-elif [ "$PAIR" -eq 1 ]; then
-  fail "--impl $IMPL is the determinism proof and runs without --$MODE"
+if [ "$MODE" = record ]; then
+  fail "$NODE_BRIDGE_GONE"
 fi
 
-if [ "$MODE" = record ] && [ "$IMPL" != node ]; then
-  fail "--record runs the Node bridge only; the Rust side is measured, never the measure"
+if [ -z "$MODE" ]; then
+  usage >&2
+  fail "one of --check or --self-test is required"
 fi
 
 # Never build. A yardstick that compiles its candidate would also be measuring the
 # toolchain, and the spec says the binary comes from stage 1.
-if [ "$IMPL" = rust ] || [ "$IMPL" = "node,rust" ] || [ "$IMPL" = "rust,node" ]; then
-  [ -x "$RUST_BIN" ] || fail "rust binary missing: $RUST_BIN"
-fi
+[ -x "$RUST_BIN" ] || fail "rust binary missing: $RUST_BIN"
 
 SELECTED=("${ALL_COMPARISONS[@]}")
 if [ -n "$ONLY" ]; then
@@ -205,9 +196,9 @@ chmod 600 "$TOKEN_FILE"
 # ------------------------------------------------------------------- masking ----
 
 # The mask table of `docs/37`, applied to every comparison before it is compared —
-# in `--record`, `--check`, `--self-test` and `node,node` alike. Skipping it in one
-# of the four would make it useless: the timestamps of two runs differ by
-# construction, so an unmasked comparison could never be identical.
+# in `--check` and `--self-test` alike. Skipping it in one of the two would make it
+# useless: the timestamps of two runs (the frozen artefact's and this one's) differ
+# by construction, so an unmasked comparison could never be identical.
 #
 #   timestamp prefix   the same regex `test/bridge.test.js` uses
 #   port owner         PID differs per run, the name differs per Node version
@@ -426,36 +417,6 @@ show_difference() { # expected, actual
 
 # --------------------------------------------------------------------- modes ----
 
-record_mode() {
-  local n failed=0
-  mkdir -p "$EXPECTED"
-
-  for n in "${SELECTED[@]}"; do
-    if ! record_probe node "$n"; then
-      failed=1
-      continue
-    fi
-    cp "$RUN_DIR/probe-$n.txt" "$(artifact_of "$n")"
-
-    # The count is the second half of the header line: a comparison that recorded
-    # fewer cases than the spec names is wrong even when every case it did record
-    # matches. Checked per file, so `--only` cannot hide a short comparison.
-    local got want
-    got=$(awk '/^# cases=/{split($0, parts, "="); print parts[2]}' "$(artifact_of "$n")")
-    want=${EXPECTED_CASE_COUNTS[$((n - 1))]}
-    if [ "$got" != "$want" ]; then
-      printf 'comparison %s recorded %s cases, expected %s\n' "$n" "$got" "$want" >&2
-      failed=1
-      continue
-    fi
-    printf 'recorded %s %s (%s cases)\n' "$n" "${NAMES[$n]}" "$got"
-  done
-
-  [ "$failed" -eq 0 ] || fail "recording failed; the artefacts are incomplete and must not be checked in"
-
-  printf '%s recorded\n' "${#SELECTED[@]}"
-}
-
 check_mode() { # impl
   local impl=$1 n passed=0 total=0
   for n in "${SELECTED[@]}"; do
@@ -471,31 +432,6 @@ check_mode() { # impl
 
   printf '%s/%s wie erwartet\n' "$passed" "$total"
   [ "$passed" -eq "$total" ]
-}
-
-pair_mode() { # impl-a,impl-b
-  local left=${1%%,*} right=${1##*,} n same=0 total=0
-  for n in "${SELECTED[@]}"; do
-    total=$((total + 1))
-    if record_probe "$left" "$n" && cp "$RUN_DIR/probe-$n.txt" "$RUN_DIR/run-a-$n.txt" &&
-      record_probe "$right" "$n" && cp "$RUN_DIR/probe-$n.txt" "$RUN_DIR/run-b-$n.txt" &&
-      cmp -s "$RUN_DIR/run-a-$n.txt" "$RUN_DIR/run-b-$n.txt"; then
-      printf 'identisch %s %s\n' "$n" "${NAMES[$n]}"
-      same=$((same + 1))
-    else
-      printf 'verschieden %s %s\n' "$n" "${NAMES[$n]}"
-      show_difference "$RUN_DIR/run-a-$n.txt" "$RUN_DIR/run-b-$n.txt"
-    fi
-  done
-
-  # The plan line only claims identity when there was identity: a red run that
-  # still printed "1..7 identisch" would be the one output nobody reads twice.
-  if [ "$same" -eq "$total" ]; then
-    printf '1..%s identisch\n' "$total"
-  else
-    printf '1..%s: %s identisch, %s verschieden\n' "$total" "$same" "$((total - same))"
-  fi
-  [ "$same" -eq "$total" ]
 }
 
 # Flipping the first character of the first content line: deterministic, applies
@@ -550,10 +486,8 @@ self_test_mode() { # impl
 
 STATUS=0
 case "$MODE" in
-  record) record_mode || STATUS=1 ;;
   check) check_mode "$IMPL" || STATUS=1 ;;
   self-test) self_test_mode "$IMPL" || STATUS=1 ;;
-  pair) pair_mode "$IMPL" || STATUS=1 ;;
 esac
 
 # The other half of the port preflight: a listener this run forgot to stop must be

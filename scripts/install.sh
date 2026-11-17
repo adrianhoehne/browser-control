@@ -50,9 +50,9 @@ BINARY_SOURCE=$CLONE_DIR/bridge-rs/target/x86_64-unknown-linux-musl/release/brow
 EXTENSION_PORT=8110
 HTTP_PORT=8111
 
-# The bridge's own contract: `bridge/config.mjs` accepts 32 hex characters at the
-# least. A stricter number here would refuse a token the bridge happily starts
-# with — a false alarm is worse than a hint.
+# The bridge's own contract: `bridge-rs/src/config.rs` (`MIN_TOKEN_LENGTH`) accepts
+# 32 hex characters at the least. A stricter number here would refuse a token the
+# bridge happily starts with — a false alarm is worse than a hint.
 MIN_TOKEN_LENGTH=32
 # What INSTALL.md writes. Anything shorter than this is usable but worth a hint.
 TOKEN_LENGTH_HINT=64
@@ -334,7 +334,7 @@ require_readable_token() {
 }
 
 # The content of the token file without whitespace at its edges — what `.trim()` does
-# in `readToken()` (`bridge/config.mjs`). Inner whitespace stays, deliberately: a
+# in `read_token()` (`bridge-rs/src/config.rs`). Inner whitespace stays, deliberately: a
 # token with a space in the middle is refused here because the bridge refuses it
 # too. Trimming line by line with `sed` would be shorter and wrong for a file whose
 # first line is empty — the bridge still accepts what stands on the second.
@@ -347,7 +347,7 @@ read_token_value() {
   printf '%s' "$content"
 }
 
-# Same threshold as `bridge/config.mjs`: 32 hex characters are the minimum. A
+# Same threshold as `bridge-rs/src/config.rs`: 32 hex characters are the minimum. A
 # shorter token cannot work, and pretending otherwise would only move the failure
 # into the service log.
 validate_token() {

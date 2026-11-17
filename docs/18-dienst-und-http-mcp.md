@@ -60,12 +60,14 @@ Die Bridge läuft **einmal** als Dienst und bietet zwei Endpunkte:
   Warten, keine stille Ausweichlösung. Ein Dienst, dessen Port sich bei jedem Start
   ändert, ist für jeden Client unbrauchbar, und ein Suchlauf verdeckt genau die
   Kollision, die man sehen will.
-- **Auch die Tests suchen nicht.** Sie binden **reservierte Testports**
-  (`18110`–`18119`, je Testdatei ein Paar aus einem gemeinsamen Modul) und laufen
-  **seriell** (`--test-concurrency=1`): feste Ports können sich zwei Dateien nicht
-  teilen, und ein belegter Testport muss sofort mit Klartext scheitern, nicht nach
-  15 s Wiederholung.
-- **stdio bleibt erhalten** (`bridge.mjs` ohne Argumente verhält sich wie heute):
+- **Auch die Tests suchen nicht.** Sie binden **reservierte Ports** und laufen
+  **seriell** (`--test-concurrency=1`): feste Ports können sich zwei Läufe nicht
+  teilen, und ein belegter Port muss sofort mit Klartext scheitern, nicht nach
+  15 s Wiederholung. Seit dem Schnitt (`docs/38`, Stufe 4b) gehören die Ports
+  `18115`/`18116` allein dem Paritätsmaßstab (`scripts/parity.sh`); die Rust-Tests
+  binden nur ephemere Ports (`port: 0`), und `cargo test` läuft aus demselben Grund
+  mit `--test-threads=1`.
+- **stdio bleibt erhalten** (das Binary ohne Argumente verhält sich wie heute):
   Tests und ein Rückfallweg brauchen ihn, und ein Wechsel des Transports soll die
   Werkzeugschicht nicht mitziehen.
 
@@ -133,8 +135,8 @@ Keine Änderung.
 
 ## Betrieb
 
-- `deploy/browser-control.service` (User-Unit): `ExecStart=/usr/bin/env node
-  %h/browser-control/bridge/bridge.mjs --http`, `Restart=on-failure`, `RestartSec=2`,
+- `deploy/browser-control.service` (User-Unit): `ExecStart=%h/.local/bin/browser-control-bridge
+  --http`, `Restart=on-failure`, `RestartSec=2`,
   **`RestartPreventExitStatus=2`** (ein fehlendes Token beendet den Dienst, statt
   ihn alle zwei Sekunden neu zu starten und das Journal zu füllen),
   `Environment=BC_HTTP_PORT=8111`, `StandardError=journal`,
@@ -142,10 +144,11 @@ Keine Änderung.
 - `INSTALL.md` beschreibt den Dienst **harness-neutral**: ein Beispiel mit `url` +
   `Authorization: Bearer ${BROWSER_CONTROL_TOKEN}` und eines mit `command` (stdio),
   dazu die Warnung, `/mcp` nie über einen Proxy zu veröffentlichen.
-- `INSTALL.md` beschreibt **auch den Interpreterpfad**: User-Units bekommen einen
-  minimalen `PATH`, eine nvm-Installation ist dort unsichtbar (`env: node: No such
-  file`). Der absolute Pfad gehört in die Unit oder in `Environment=PATH=…` — er
-  wird dokumentiert, nicht geraten.
+- `INSTALL.md` beschreibt **auch den Startweg**: die Unit startet ein statisch
+  gelinktes Binary, also braucht sie keinen Interpreterpfad und keinen `PATH`-Zusatz.
+  Der historische Stolperstein (User-Units sehen keinen nvm-`node`) ist damit weg —
+  was bleibt, ist die Vorbedingung, dass `scripts/install.sh` das Binary nach
+  `%h/.local/bin` kopiert hat.
 - `INSTALL.md` beschreibt: Unit installieren (`systemctl --user enable --now`),
   `loginctl enable-linger` (damit der Dienst ohne offene Sitzung läuft), und der
   `mcp.json`-Eintrag wechselt von `command` auf
@@ -162,14 +165,15 @@ Keine Änderung.
 | `2` | Tokendatei fehlt oder ist zu kurz — **der bestehende Code** aus Spec 01 |
 
 `2` ist der Grund für `RestartPreventExitStatus=2`: ein fehlendes Token heilt kein
-Neustart. Beide Codes bekommen einen Fall in `test/bridge.test.js`
-(`BC_TOKEN_FILE` auf einen nicht existierenden Pfad ⇒ `2`; vorbelegter Port ⇒ `1`).
+Neustart. Beide Codes bekommen einen Fall: `2` in `bridge-rs/tests/bridge.rs`
+(`BC_TOKEN_FILE` auf einen nicht existierenden Pfad), `1` als Paritätsvergleich 5
+(`scripts/parity/expected/5-port-busy.txt` — belegter Port, Besitzerzeile, Exit 1).
 
 ## Testing
 
 | Datei / Fall | Was er beweist |
 |---|---|
-| `test/http-transport.test.js` — `POST /mcp` mit `tools/list` und gültigem Token | `200`, `application/json`, neun Werkzeuge |
+| `bridge-rs/tests/http.rs` — `POST /mcp` mit `tools/list` und gültigem Token | `200`, `application/json`, dreizehn Werkzeuge |
 | dito — ohne Token / falsches Token | `401` **und** `WWW-Authenticate: Bearer`, keine Werkzeugdaten |
 | dito — `GET /mcp` | `405` |
 | dito — unbekannter Pfad | `404` |
@@ -177,28 +181,34 @@ Neustart. Beide Codes bekommen einen Fall in `test/bridge.test.js`
 | dito — kaputtes JSON | JSON-RPC-Fehler `-32700` mit `200` (Transportfehler ≠ Protokollfehler) |
 | dito — Riesenkörper über der Grenze | `413`, kein Speicherwachstum |
 | dito — `initialize` | Antwort ohne `Mcp-Session-Id` |
-| `test/bridge.test.js` — Start ohne `--http` | bindet **nur** 8110 (Zähler über gebundene Ports) |
+| `bridge-rs/tests/bridge.rs` — Start ohne `--http` | bindet **nur** 8110 (Zähler über gebundene Ports) |
 | dito — Port belegt | Prozess endet mit Exit ≠ 0 **und** einer Zeile, die den Besitzer nennt |
 | `deploy/browser-control.service` | Datei existiert, enthält `Restart=on-failure`, `RestartPreventExitStatus=2`, `--http`, `StandardError=journal`; kein `/home/`, kein Token, kein `0.0.0.0` (Textprüfung — sie behauptet nicht, dass systemd die Datei akzeptiert) |
-| `test/http-mcp.test.js` — dieselbe Anfrage über stdio und über HTTP | beide Antworten gleich (Kriterium 2 als Vergleich) |
-| `test/http-mcp.test.js` — **reiner HTTP-Client ohne Harness**: `initialize` → `tools/list` → `tools/call` | der Dienst ist ohne pi benutzbar; `serverInfo` trägt den Dienstnamen, `capabilities` nur `tools` |
-| `test/ports.js` (neu) — die reservierte Testport-Tabelle | eine Quelle für alle Testdateien; `findFreePort` kommt in **keiner** Testdatei mehr vor (`grep` = 0) |
-| belegter Testport | sofortiger Fehlschlag mit Klartext, **keine** Wiederholung |
+| `bridge-rs/tests/http.rs` — dieselbe Anfrage über stdio und über HTTP | beide Antworten gleich (`http_withTheSameAnswerAsStdio_shouldMatch`, Kriterium 2 als Vergleich) |
+| `bridge-rs/tests/http.rs` — **reiner HTTP-Client ohne Harness**: `initialize` → `tools/list` → `tools/call` | der Dienst ist ohne pi benutzbar; `serverInfo` trägt den Dienstnamen, `capabilities` nur `tools` |
+| `bridge-rs/tests/ports.rs` — die Porttabelle aus `tests/common/mod.rs` | jedes Paar liegt im Bereich `18110`–`18119`, kein Port doppelt — die Tabelle steht im Maßstab und prüft sich selbst |
+| belegter Port | sofortiger Fehlschlag mit Klartext, **keine** Wiederholung |
 | dito — Werkzeugtexte und `serverInfo` | enthalten keinen Harness-Namen (`pi`, `claude`, `cursor`, `copilot`) — Textprüfung über `tools/list` |
 
 ## Acceptance criteria
 
 1. `npm test; echo $?` → `0`, `# fail 0` **und** `# cancelled 0`;
    `npm run check; echo $?` → `0`; `git grep --untracked -nE '[0-9a-f]{32,}' -- .`
-   → keine Ausgabe, Exit 1. Die **373 bestehenden Fälle bleiben grün** — keiner
-   gelöscht, keiner übersprungen; die Gesamtzahl wächst um die neuen Dateien
-   (`port-owner`, `config`, `http-transport`, `http-mcp`, `deploy`).
-2. Ein HTTP-Aufruf an `/mcp` mit gültigem Token liefert dieselben neun Werkzeuge wie
-   der stdio-Pfad — verglichen, nicht behauptet.
-2b. **Kein Portsuchlauf:** `grep -rn findFreePort test/` ist leer, die Testports
-   stehen in einer Tabelle (`18110`–`18119`), und `npm test` läuft mit
-   `--test-concurrency=1`. Ein belegter Testport scheitert in unter einer Sekunde mit
-   einer Zeile, die den Port nennt.
+   → keine Ausgabe, Exit 1. **Gemessen nach dem Schnitt (2026-11-17): 492 Fälle**
+   (`# fail 0`, `# cancelled 0`, `# skipped 0`) — vorher 765. Die Differenz von 273
+   ist nachvollziehbar: die zehn Node-Bridge-Testdateien (`bridge`, `config`,
+   `http-mcp`, `http-transport`, `hub`, `mcp`, `port-owner`, `ports`, `protocol`,
+   `websocket`) sind mit `bridge/` entfallen; ihr Verhalten prüfen jetzt
+   `bridge-rs/tests/*` und der Paritätsmaßstab (`docs/38`, Stufe 4b).
+2. Ein HTTP-Aufruf an `/mcp` mit gültigem Token liefert dieselben dreizehn Werkzeuge
+   wie der stdio-Pfad — verglichen, nicht behauptet.
+2b. **Kein Portsuchlauf:** `grep -rn findFreePort test/` ist leer; die Porttabelle
+   steht in `bridge-rs/tests/ports.rs` (gegen `tests/common/mod.rs`) und
+   `scripts/parity.sh` ist der einzige Lauf mit festen Ports (`18115`, `18116`).
+   `cargo test` läuft mit `--test-threads=1`, und keiner der drei Läufe
+   (`npm test`, `cargo test`, `scripts/parity.sh`) startet neben einem anderen. Ein
+   belegter Port scheitert in unter einer Sekunde mit einer Zeile, die den Port
+   nennt.
 3. Ohne Token und mit falschem Token: `401`, keine Werkzeuginhalte.
 4. Beide Endpunkte binden nur an `127.0.0.1`: für `/mcp` über
    `server.address().address`, für den Extension-Socket über eine
@@ -281,6 +291,11 @@ Token kommt niemand hinein. Was **nicht** belegt ist: ob ein Harness (pi) sich �
 
 ## Bekannte Lücken
 
+- **Die Bridge ist seit 2026-11-17 ein Rust-Binary** (`bridge-rs/`); Node bleibt nur
+  für Tests und Parity. Alle Dateinamen dieses Dokuments (`bridge/*.mjs`) sind der
+  Stand, gegen den es geschrieben wurde — der Port und seine sieben Paritäts-
+  artefakte stehen in `docs/37` und `docs/38`. Die Unit startet
+  `%h/.local/bin/browser-control-bridge --http`.
 - **`BC_BIND=127.0.0.1:0` wird still zu `8110`.** `parsePort` verwirft die `0` und
   der Rückfall auf den Default greift — wer dort „ephemeren Port" erwartet, bekommt
   den Port des laufenden Dienstes. Gemessen am 2026-10-23 (der Umsetzer stolperte

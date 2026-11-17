@@ -395,8 +395,9 @@ export const TRANSCRIPT_RESULT = {
 /* ---------------------------------------------------------------- wire format */
 
 // Literal strings on purpose: this fixture speaks the wire protocol as the spec
-// documents it, not as `bridge/protocol.mjs` implements it. A diverging constant
-// is supposed to break this test, and mirroring the constant here would hide it.
+// documents it, not as `bridge-rs/src/protocol.rs` implements it — and not as the
+// value `extension/protocol.js` carries. A diverging constant is supposed to break
+// this test, and mirroring the constant here would hide it.
 function helloMessage(token) {
   return {
     type: "hello",

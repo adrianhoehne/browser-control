@@ -6,8 +6,13 @@ write a spec in `docs/` first.
 
 ## Prerequisites
 
-- **Node ≥ 22** (`package.json`, `engines.node`). There are **no** dependencies —
-  no `npm install` needed.
+- **Node ≥ 22** (`package.json`, `engines.node`) for the tests, the syntax check
+  and the parity run. There are **no** dependencies — no `npm install` needed.
+  The product itself is **not** JavaScript any more: the bridge is
+  `bridge-rs/`, a statically linked binary (`docs/38`). Node is a tool here, not
+  a runtime.
+- **Rust** (`rustup`) for `cargo test`, `cargo build` and `cargo clippy`, with the
+  targets `x86_64-unknown-linux-musl` and `x86_64-pc-windows-gnu`.
 - Firefox to try the extension (see `INSTALL.md`).
 - For live measurements: your own browser, your own token, your own machine.
   None of that is in the repo.
@@ -17,11 +22,15 @@ write a spec in `docs/` first.
 ```bash
 npm test; echo $?       # 0; the output contains "^# fail 0" AND "^# cancelled 0"
 npm run check; echo $?  # 0 — node --check over every .js/.mjs
+cargo test --manifest-path bridge-rs/Cargo.toml -- --test-threads=1; echo $?   # 0
 ```
 
 `npm test` runs with `--test-concurrency=1 --test-timeout=90000`: a file that
-hangs fails after 90 s instead of holding the run open. The slowest file is
-`test/mcp.test.js`.
+hangs fails after 90 s instead of holding the run open. `--test-threads=1` in the
+Rust run is the same rule for the other suite: the cases that start a real bridge
+must not share a machine with each other. **The two suites and
+`scripts/parity.sh` never run at the same time** — the parity run owns ports
+`18115`/`18116`.
 
 **A proof needs a case name.** `grep -c '^ok [0-9]* - '` without a name is
 vacuously green — Node counts the file line `ok 1 - test/…` too. Always write
@@ -73,6 +82,9 @@ These commands must be green before every commit:
 ```bash
 npm test; echo $?                    # 0, contains "^# fail 0" and "^# cancelled 0"
 npm run check; echo $?               # 0
+cargo test --manifest-path bridge-rs/Cargo.toml -- --test-threads=1; echo $?   # 0, "^test result: ok"
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl; echo $?   # 0
+bash scripts/parity.sh --impl rust --check; echo $?   # 7/7 wie erwartet, 0
 git grep --untracked -nE '[0-9a-f]{32,}' -- . ':(exclude)bridge-rs/Cargo.lock'   # no output, exit 1
 git grep -nE '[0-9a-f]{32,}' -- bridge-rs/Cargo.lock | grep -v 'checksum = "'   # no output, exit 1
 # Two commands, one reason: Cargo.lock carries 64-character crate checksums, and a
@@ -121,10 +133,11 @@ No commit without green acceptance **and** a `✅` from step 6.
 - **The browser belongs to the operator.** The agent works in its own tab and
   hands it back as soon as the operator steps in; logins, two-factor and passkeys
   are the operator's job.
-- **Clean up by PID, never by pattern.** `pkill -f bridge.mjs` also kills the
-  operator's running service: a probe process started by hand has exactly the
-  same command line (`node …/bridge/bridge.mjs --http`). This happened on
-  2026-11-17 and took the bridge down mid-increment. Kill the PID you started —
+- **Clean up by PID, never by pattern.** `pkill -f browser-control-bridge` also
+  kills the operator's running service: a probe process started by hand has
+  exactly the same command line (`…/browser-control-bridge --http`). This
+  happened on 2026-11-17 (`pkill -f bridge.mjs`, the Node entry point of the
+  time) and took the bridge down mid-increment. Kill the PID you started —
   `$!`, `kill $PID`, or the PID from `ss -ltnp`; for the service use
   `systemctl --user stop browser-control.service`.
 

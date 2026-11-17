@@ -258,7 +258,8 @@ test("install_helpPrintsTheOptionsAndWritesNothing", (t) => {
 
 test("install_withOldNodeOnThePath_ignoresTheVersion", (t) => {
   // GIVEN a sandbox whose `node` reports version 20 — the state the installer used to
-  // refuse, because the unit started `node bridge/bridge.mjs`,
+  // refuse back when the unit started the Node bridge entry point (deleted by
+  // docs/38; the unit runs a binary now),
   const sandbox = makeSandbox(t);
   writeNodeStub(sandbox, "v20.11.1");
 

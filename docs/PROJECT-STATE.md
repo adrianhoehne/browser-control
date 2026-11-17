@@ -8,6 +8,37 @@ Log oder einer Spec widerspricht, gilt der Beleg und diese Datei ist falsch.
 
 **Eine Übergabe-Datei gibt es nicht mehr.** Bis 2026-11-12 lag hier `docs/HANDOVER.md` (Stand, Entscheidungen, Betrieb); für die Veröffentlichung ist sie entfallen, weil sie Betriebsdaten trug. Der Stand steht in dieser Datei, das Verfahren in `CONTRIBUTING.md`, die Einrichtung in `INSTALL.md`.
 
+## Stand (2026-11-17): der Schnitt ist vollzogen — die Bridge ist Rust
+
+**`docs/37` und `docs/38` sind `active`; die Node-Bridge ist mit diesem Inkrement
+gelöscht.** Ein Commit nimmt `bridge/` (acht Dateien), die zehn Node-Bridge-
+Testdateien und `test/ports.js` aus dem Baum; danach gilt
+`git log --diff-filter=D --oneline -- bridge/ | wc -l` ⇒ **1**.
+
+| Was | Stand |
+|---|---|
+| Betrieb | `browser-control-bridge`, ein statisch gelinktes Rust-Binary (`bridge-rs/`), gestartet von `deploy/browser-control.service` (`ExecStart=%h/.local/bin/browser-control-bridge --http`) |
+| Windows | derselbe Prozess als `.exe`, gestartet vom Task Scheduler (`deploy/windows/browser-control-bridge.xml`) — kompiliert, nicht gelaufen |
+| Node | nur noch Werkzeug: `npm test`, `npm run check`, `scripts/parity.sh` |
+| Node-Suite | **492 Fälle** grün (`# fail 0`, `# cancelled 0`, `# skipped 0`), vorher 765 — die 273 sind die zehn gelöschten Bridge-Testdateien |
+| Rust-Suite | **283 Fälle**, 0 failed (`cargo test … -- --test-threads=1`) |
+| Paritätsmaßstab | **7/7** (`scripts/parity.sh --impl rust --check`, Exit 0); `--self-test` **7/7 rot**; die sieben Artefakte in `scripts/parity/expected/` sind **eingefroren** — `--record`, `--impl node` und `node,node` antworten mit Exit 1 |
+| Syntaxprüfung | `npm run check` ⇒ `checked 14 files`, Exit 0 (vorher 33) |
+
+**Was das für den Betrieb heißt:** der Betreiber schaltet um, nicht das Repo. Der
+laufende Dienst startet bis zu seinem nächsten Neustart weiter den alten
+Node-Code; danach läuft er nur noch, wenn das Binary gebaut und mit
+`./scripts/install.sh` installiert ist (`INSTALL.md`, Abschnitt 3). Die
+Umschaltung selbst ist `systemctl --user stop browser-control`,
+`cargo build --release --target x86_64-unknown-linux-musl`,
+`./scripts/install.sh`, `systemctl --user start browser-control`.
+
+**Die Abschnitte „Wie ein Aufruf läuft" weiter unten nennen die Node-Dateien**
+(`bridge.mjs`, `hub.mjs`, `mcp.mjs`, …). Sie sind der Stand bis zum Schnitt und
+bleiben als Beschreibung des Flusses richtig — die Dateinamen haben Rust-
+Entsprechungen in `bridge-rs/src/` (`main.rs`, `hub.rs`, `mcp/`, `http.rs`,
+`ws/`, `platform/`). Wer den Code heute liest, liest dort.
+
 ## Stand (2026-11-12, nachts): Teil 2 ist abgenommen
 
 **`docs/33-spurwahl.md` und `docs/34-spurendatei-beobachten.md` sind `active`.**
@@ -42,7 +73,8 @@ statisch für `x86_64-unknown-linux-musl` (542 KB) und `x86_64-pc-windows-gnu`
 (`PE32+`, 1,2 MB), und `scripts/parity.sh` misst gegen **sieben eingecheckte
 Soll-Artefakte** (`--check` 7/7, `node,node` identisch, `--self-test` 7/7 rot).
 `docs/38` (Teil 2, der Port) ist `proposed`; seine Runde-1-Befunde sind
-eingearbeitet, gebaut ist dort noch nichts.
+eingearbeitet, gebaut ist dort noch nichts. — **Überholt:** Teil 2 ist seit
+2026-11-17 gebaut und abgenommen, die Node-Bridge ist gelöscht (Abschnitt oben).
 
 **Seit 2026-11-15 veröffentlicht:** `v0.1.0` (erste Quellenmarke), `v0.2.0`
 (`scripts/install.sh`), `v0.3.0` (Standard-Endpunkt), `v0.4.0`.

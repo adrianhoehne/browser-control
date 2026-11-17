@@ -14,8 +14,6 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
-import { loadConfig } from "../bridge/config.mjs";
-
 const PROTOCOL_SOURCE = await readFile(new URL("../extension/protocol.js", import.meta.url), "utf8");
 const BACKGROUND_SOURCE = await readFile(new URL("../extension/background.js", import.meta.url), "utf8");
 // The options page has no DOM harness (spec 36, `## Bekannte Lücken`), so its half of
@@ -24,10 +22,14 @@ const BACKGROUND_SOURCE = await readFile(new URL("../extension/background.js", i
 const OPTIONS_SOURCE = await readFile(new URL("../extension/options.js", import.meta.url), "utf8");
 
 const ENDPOINT = "ws://127.0.0.1:8110";
-// An empty environment for `loadConfig`, the way `test/config.test.js` does it: without
-// it the bridge's defaults would be read from whatever the shell exports, and an
-// exported `BC_BIND` would compare the extension's default against a foreign address.
-const NO_ENV = {};
+// The bridge's defaults as literals. They used to be read from the Node bridge's config
+// module, which the cut deleted (`docs/38`, stage 4b); the Rust bridge reads the same two
+// values from `bridge-rs/src/config.rs`. That duplication is why the drift guard two
+// tests below compares them against what the extension really dials: `docs/18` says
+// where the number comes from, and changing one side alone would leave the extension
+// dialling a port nobody listens on.
+const BRIDGE_DEFAULT_HOST = "127.0.0.1";
+const BRIDGE_DEFAULT_PORT = 8110;
 // Not a usable token, and deliberately not a 32+-hex literal: the "no secrets in
 // the repo" rule greps for exactly that shape.
 const TOKEN = "token-from-the-options-page";
@@ -2084,16 +2086,14 @@ test("endpoint_default_matchesTheBridgesDefaultPort", async () => {
   // GIVEN a fresh install that has entered the token and nothing else,
   const dialledAddress = await dialAddressWithoutAStoredEndpoint();
 
-  // WHEN we read the address the background page dialled and the one the bridge binds
-  // by default,
+  // WHEN we read the address the background page dialled and the bridge's defaults,
   const dialled = new URL(dialledAddress);
-  const config = loadConfig(NO_ENV);
 
   // THEN they have to be the same listener. This is the drift guard: changing one side
   // alone leaves an extension that dials a port nobody listens on.
   assert.equal(dialled.protocol, "ws:", "loopback is bare WebSocket; TLS is the Caddy path");
-  assert.equal(dialled.hostname, config.host);
-  assert.equal(dialled.port, String(config.port));
+  assert.equal(dialled.hostname, BRIDGE_DEFAULT_HOST);
+  assert.equal(dialled.port, String(BRIDGE_DEFAULT_PORT));
 });
 
 test("endpoint_default_isTheSameInOptionsAndBackground", async () => {

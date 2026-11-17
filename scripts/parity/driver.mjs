@@ -30,12 +30,17 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
-const NODE_BRIDGE = path.join(ROOT, "bridge/bridge.mjs");
 const RUST_BRIDGE = path.join(
   ROOT,
   "bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge",
 );
 const FAKE_EXTENSION = path.join(ROOT, "test/fixtures/fake-extension.mjs");
+
+// One sentence, in the operator's language, for a state that is final: the Node
+// bridge was deleted in the cut (`docs/38`, stage 4b) and only its recorded answers
+// remain. Asking for it is not a typo to work around, so this is a loud abort.
+const NODE_BRIDGE_GONE =
+  "keine Node-Bridge mehr — die sieben Artefakte sind eingefroren; gemessen wird mit --impl rust --check";
 
 // Pinned per run, not defaulted: `docs/37` fixes these two numbers for every
 // comparison, and the same values are what make "300 ms" a measurement instead
@@ -47,7 +52,8 @@ const STOP_GRACE_MS = 5_000;
 
 const USAGE = `usage: driver.mjs --mode rpc|probe|logs|exit --token-file <path> [options]
 
-  --impl node|rust             which implementation to start (default: node)
+  --impl rust                  which implementation to start (only rust is left;
+                               the Node bridge was deleted, docs/38 stage 4b)
   --mode <name>                rpc | probe | logs | exit (default: rpc)
   --requests <file>            rpc: one JSON-RPC line per request
   --probe <file>               probe: the Node script to run against the bridge
@@ -70,7 +76,7 @@ const USAGE = `usage: driver.mjs --mode rpc|probe|logs|exit --token-file <path> 
 
 function parseOptions(argv) {
   const options = {
-    impl: "node",
+    impl: "rust",
     mode: "rpc",
     requests: null,
     tokenFile: null,
@@ -184,17 +190,21 @@ function exitCodeOf(handle) {
 }
 
 function startImplementation(options) {
-  const [command, args] =
-    options.impl === "node" ? [process.execPath, [NODE_BRIDGE]] : [RUST_BRIDGE, []];
+  if (options.impl !== "rust") {
+    // Not a `throw`: the message is the point, and a stack trace above it would bury
+    // it. Exit 1 is what `scripts/parity.sh` reports for the same input.
+    process.stderr.write(`driver: ${NODE_BRIDGE_GONE}\n`);
+    process.exit(1);
+  }
   // The flag is appended only here: `BC_HTTP_PORT` sets a port, never a mode.
-  const argv = options.http ? [...args, "--http"] : args;
+  const argv = options.http ? ["--http"] : [];
   // stdin is `ignore` for every mode that does not speak JSON-RPC: that is how the
   // service is started under systemd, and `/dev/null` is exactly what the bridge's
   // `stdinIsClientChannel()` is written against.
   const stdinMode = options.mode === "rpc" ? "pipe" : "ignore";
 
   return startProcess(
-    command,
+    RUST_BRIDGE,
     argv,
     childEnv({
       BC_BIND: options.bind,

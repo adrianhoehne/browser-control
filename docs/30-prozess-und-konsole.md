@@ -18,6 +18,16 @@ Diese Spec ist am 2026-11-06 aus einer gemeinsamen Fassung herausgeteilt worden,
 nachdem das Spec-Gate sie in der dritten Runde erneut blockiert hatte; die Blocker
 betrafen genau diesen Teil (siehe `## Review` und `## Log`).
 
+**Nachtrag 2026-11-17 (der Schnitt, `docs/38` Stufe 4b):** die Node-Bridge ist
+gelöscht, betrieben wird `browser-control-bridge` (`bridge-rs/`). Die Dateinamen
+`bridge/*.mjs` unten sind der Stand, gegen den diese Spec geschrieben wurde; das
+Verhalten ist portiert — die Signal- und stdin-Regeln stehen in
+`bridge-rs/src/main.rs` und `bridge-rs/src/stdio.rs`, der Portbesitzer in
+`bridge-rs/src/platform/windows.rs` (`GetExtendedTcpTable`). Node bleibt nur für
+`npm test`, `npm run check` und `scripts/parity.sh`. Die Startbefehle unten nennen
+deshalb das Binary; der Weg über den Task Scheduler steht in
+`deploy/windows/browser-control-bridge.xml`.
+
 ## Ziel
 
 - **Die Konsole ist der Normalfall, der Dienst die Option.** Die Bridge läuft im
@@ -43,14 +53,20 @@ betrafen genau diesen Teil (siehe `## Review` und `## Log`).
 
 ## Non-goals
 
-- **Kein Dienst-Ersatz und kein Autostart.** Task Scheduler, NSSM, WinSW sind
-  Teil 2; ob ein Fremdprogramm ins Spiel kommt, entscheidet der Betreiber dort.
+- **Kein Dienst-Ersatz in dieser Spec.** Autostart war hier ausdrücklich Teil 2;
+  **erledigt durch `docs/38`** (Stufe 3): `deploy/windows/browser-control-bridge.xml`
+  startet die Bridge als Task-Scheduler-Aufgabe (`AtLogOn`, `InteractiveToken`,
+  `LeastPrivilege`) — ohne NSSM, ohne WinSW, ohne Adminrechte.
 - **Keine Endpunkt-Entscheidung.** Ob die Extension auf demselben Rechner
   `ws://127.0.0.1:8110` (ohne TLS) oder `wss://` über einen lokalen Caddy spricht,
   ist Teil 2 und eine Sicherheitsfrage.
 - **Keine Änderung an der Extension** — kein `extension/*`, kein `manifest.json`.
-- **Keine Windows-Implementierung von `port-owner`.** `netstat`/`Get-NetTCPConnection`
-  auszuwerten hieße, einen Unterprozess einzuführen, den es heute bewusst nicht gibt.
+- **~~Keine Windows-Implementierung von `port-owner`~~ — erledigt durch `docs/38`.**
+  `bridge-rs/src/platform/windows.rs` liest den Besitzer über `GetExtendedTcpTable`
+  und `QueryFullProcessImageNameW`, also ohne Unterprozess (der Grund, aus dem diese
+  Zeile `netstat` ausgeschlossen hatte, gilt weiter: kein `netstat`-Parser, kein
+  `Get-NetTCPConnection`). Der Lauf auf Windows ist eine Betreiber-Messung
+  (`bridge-rs/README.md`, `## Bekannte Lücken`).
 - **Kein WSL, kein Container, keine zweite Betriebsart.** Windows ist ein
   zusätzlicher Wirt für denselben Prozess, kein neuer Pfad im Code.
 - **Kein Abschaffen des stdio-Rückfallwegs.** Wer die Bridge als Kind von pi startet
@@ -91,7 +107,7 @@ betrafen genau diesen Teil (siehe `## Review` und `## Log`).
 | `test/bridge.test.js` | `portInUseLine` mit `lookup: () => null` ⇒ `port 127.0.0.1:8110 in use, Besitzer nicht ermittelbar` ohne `pid=`; mit `lookup: () => ({ pid: 42, name: "node" })` ⇒ `… owner pid=42 name=node` | Kriterium 4 ist ohne `/proc` prüfbar |
 | `test/bridge.test.js` | `shutdownSignalNames` nennt auf `win32` zusätzlich `SIGBREAK`, auf POSIX nicht | die Signalliste ist Daten, nicht Branch-Logik |
 | `test/bridge.test.js` | `bridge_withSIGINT_shouldExitZeroAndLogTheShuttingDownLine` — Exit 0 und `received SIGINT, shutting down`; **auf Windows übersprungen**, Grund im `skip`-Text | das geordnete Ende ist auf POSIX belegt und auf Windows eine Betreiber-Messung |
-| `test/deploy.test.js` | `REQUIRED_LINES` pinnt `ExecStart=… bridge/bridge.mjs --http`; unverändert grün | der Dienstweg bleibt intakt, während die Konsole der Normalfall wird |
+| `test/deploy.test.js` | `REQUIRED_LINES` pinnt `ExecStart=%h/.local/bin/browser-control-bridge --http`; unverändert grün | der Dienstweg bleibt intakt, während die Konsole der Normalfall wird |
 | `test/mcp.test.js` | der Pipe-stdin-Weg bleibt grün (139 Fälle, inklusive `initialize`) | der stdio-Rückfallweg für pi ist unberührt |
 | `npm test` | `# fail 0`, `# cancelled 0`, lokal `# skipped 0` | auf Linux versteckt sich nichts; auf Windows erscheint `# skipped N` mit N ≥ 12 (Betreiber) |
 
@@ -120,7 +136,7 @@ Vorwärtsschrägstrichen geschrieben.
    node -e "const f=require('fs'),p=require('path'),d=path.join(process.env.USERPROFILE,'.config','browser-control');f.mkdirSync(d,{recursive:true});f.writeFileSync(path.join(d,'token'),require('crypto').randomBytes(32).toString('hex'))"
    ```
 
-   Dann, mit sichtbarem Exit-Code: `node bridge/bridge.mjs --http; echo "exit=$?"`.
+   Dann, mit sichtbarem Exit-Code: `%LOCALAPPDATA%\browser-control\browser-control-bridge.exe --http; echo "exit=$?"`.
    Der Prozess schreibt `listening on 127.0.0.1:8110 …` und
    `listening on 127.0.0.1:8111 for POST /mcp`; `Strg+C` beendet ihn mit
    `received SIGINT, shutting down` und `exit=0`, dasselbe mit `Strg+Untbr` in einem
@@ -177,7 +193,7 @@ Vorwärtsschrägstrichen geschrieben.
 
    ```
    :: in Windows Terminal oder cmd.exe, Vordergrund, zwei Fenster oder Umleitung:
-   node bridge\bridge.mjs --http 1>out.log 2>err.log
+   %LOCALAPPDATA%\browser-control\browser-control-bridge.exe --http 1>out.log 2>err.log
    ```
 
    In `err.log` stehen die zwei `listening`-Zeilen, `out.log` bleibt **0 Byte**, und
@@ -187,8 +203,8 @@ Vorwärtsschrägstrichen geschrieben.
    error"}}` auf stdout (vom Reviewer am 2026-11-06 gemessen).
 8. **Der Dienst bleibt eine Betriebsart** (lokal, ohne Eingriff in diese Sitzung).
    Beleg sind die Fälle, die den Dienstweg wirklich pinnen: `test/deploy.test.js`
-   (`REQUIRED_LINES` enthält `ExecStart=/usr/bin/env node
-   %h/browser-control/bridge/bridge.mjs --http`) und `mcpStdioEnabled` mit einem
+   (`REQUIRED_LINES` enthält `ExecStart=%h/.local/bin/browser-control-bridge --http`)
+   und die stdin-Regel mit einem
    stdin, das kein TTY ist — der Dienst setzt `StandardInput=` nicht, bekommt also
    `/dev/null`, und dort muss der stdio-Server **weiter** starten. Die Unit wird
    **nicht** gestoppt: das kappte die Verbindung, über die pi in dieser Sitzung den
@@ -346,7 +362,18 @@ in `INSTALL.md` anhängt. Er beschreibt **heute schon mögliches** Verhalten, au
    Firefox ist kein TLS-Terminator nötig, und die Bridge bindet per Default nur
    Loopback (`bridge/config.mjs:14`). Die Entscheidung, ob hier ein lokaler Caddy
    mit `wss://` hingehört, ist Teil 2.
-4. Bridge starten: `node bridge/bridge.mjs --http` (Konsole, `Strg+C` beendet).
+4. Bridge starten: `%LOCALAPPDATA%\browser-control\browser-control-bridge.exe --http`
+   (Konsole, `Strg+C` beendet). Für den Autostart die Aufgabe aus
+   `deploy/windows/browser-control-bridge.xml` registrieren:
+
+   ```powershell
+   schtasks /Create /XML "$env:USERPROFILE\browser-control\deploy\windows\browser-control-bridge.xml" /TN browser-control-bridge
+   schtasks /Run /TN browser-control-bridge
+   schtasks /Query /TN browser-control-bridge /FO LIST   # Status: Running
+   ```
+
+   Das XML erwartet das Binary unter `%LOCALAPPDATA%\browser-control\` — es dorthin
+   kopieren (und nach jedem `cargo build` erneut).
    Die POSIX-Zeile aus `INSTALL.md` (`nohup … < /dev/null &`) braucht es nicht: an
    einer Windows-Konsole ist `stdinIsClientChannel()` falsch, also beendet kein
    stdin-EOF den Prozeß.
@@ -372,10 +399,11 @@ in `INSTALL.md` anhängt. Er beschreibt **heute schon mögliches** Verhalten, au
    `cmd.exe` oder PowerShell schickt — deshalb der Umgebungsvariablen-Weg.
 7. Prüfen: `netstat -ano | findstr LISTENING | findstr ":8110 :8111"` und der
    `curl`-Aufruf aus Kriterium 5.
-8. Autostart ist **Teil 2**: Task Scheduler (`New-ScheduledTaskAction` +
-   `New-ScheduledTaskTrigger -AtLogOn`) oder NSSM/WinSW. Ohne
-   `RestartPreventExitStatus=2` entsteht dort die 2-Sekunden-Schleife, gegen die die
-   systemd-Unit geschrieben wurde — das ist der Grund, warum es nicht hier steht.
+8. Autostart ist **erledigt durch `docs/38`**: `deploy/windows/browser-control-bridge.xml`
+   (`AtLogOn`, `InteractiveToken`, `LeastPrivilege`) — Task Scheduler, **ohne** NSSM
+   und ohne WinSW. "Kein Neustart bei Fehlschlag" ist dort die Einstellung, die auf
+   Linux `RestartPreventExitStatus=2` entspricht: ein fehlendes Token heilt kein
+   Neustart.
 
 Konsole ist der Normalfall, der Dienst die Option: die Abschnitte 3 und 5 der
 Linux-Anleitung behalten ihre Befehle, nur die zwei Empfehlungswörter drehen sich

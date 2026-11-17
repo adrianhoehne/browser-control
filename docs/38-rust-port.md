@@ -1,6 +1,6 @@
 ---
 description: Teil 2 des Rust-Projekts — die Bridge-Module (Konstanten, Config, WebSocket, Hub, Werkzeuge, HTTP, stdio) nach Rust, danach Windows, Installer und der Schnitt; gemessen wird gegen den Paritätsmaßstab aus Teil 1.
-status: proposed
+status: active
 ---
 
 # Die Rust-Bridge, Teil 2: der Port
@@ -461,26 +461,9 @@ Unberührt bis 4a: `docs/18`, `deploy/browser-control.service`; unberührt bis 4
   früher die Node-Tests waren.
 - **Node bleibt für Tests und Parity** — nicht für den Betrieb.
 
-## Amendments to previous spec docs
-
-| Datei | Stelle | alt | neu | Stufe |
-|---|---|---|---|---|
-| `docs/18-…` | `## Konfiguration` / Unit | `ExecStart=/usr/bin/env node %h/browser-control/bridge/bridge.mjs --http` | `ExecStart=%h/.local/bin/browser-control-bridge --http` | 4b |
-| `docs/18-…` | `## Ziel`, `## Bekannte Lücken` | „Node ≥ 22 auf dem Zielrechner" | „ein statisch gelinktes Binary; Node nur für Tests" | 4b |
-| `docs/35-…` | `## Ziel`, Stufe 1 | `check_node_version`, `--fix-path` | `check_binary`, `install_binary` nach `$HOME/.local/bin`; `--fix-path` entfällt | 4a |
-| `docs/35-…` | `## Bekannte Lücken` | zwei Schreiborte | dazu `~/.local/bin` | 4a |
-| `docs/30-…` | Windows-Betrieb | `node bridge/bridge.mjs` | `browser-control-bridge.exe`, Task-Scheduler-Aufgabe | 4b |
-| `INSTALL.md`, `CONTRIBUTING.md` | Prerequisites/Abnahme | „Node ≥ 22" als Betriebsvoraussetzung | Node nur für Tests/Parity; `cargo test` in der Abnahme | 4b |
-| `docs/30-…` | `## Non-goals` | „Kein Dienst-Ersatz und kein Autostart. Task Scheduler, NSSM, WinSW sind Teil 2" und „**Keine** Windows-Implementierung von `port-owner`" | beides ist mit Stufe 3 **gebaut**: `GetExtendedTcpTable` und die Task-Scheduler-Aufgabe — die Zeilen werden zu „erledigt durch `docs/38`" | 4b |
-| `docs/29-…` | `## Acceptance criteria` | `npm run --silent check` ⇒ `checked 28 files` | die Zahl wird in 4b **gemessen** eingetragen (heute 33, nach dem Schnitt kleiner) — eine gepinnte Zahl, die der Schnitt verschiebt, ist ohne Nachtrag falsch | 4b |
-| `docs/18-…` | `## Testing`, Kriterium 1, Kriterium 2b | vier Zeilen auf gelöschte Testdateien, „die 373 bestehenden Fälle", Porttabelle | Zeilen auf die Rust-Tests umgestellt, Fallzahl gemessen, Porttabelle auf `tests/ports.rs` | 4b |
-| `docs/35-…` | `## Testing`, `## Acceptance criteria` | die zwei Fälle, die 4a umschreibt, und `check_node_version` | `check_binary`/`install_binary`; der `fixPath`-Fall entfällt, die Zahl wird neu gemessen | 4a |
-| `docs/ROADMAP.md` | Zeilen 23/24, 26–28 | Signierung setzt MV3 voraus | unverändert — der Port berührt die Signatur nicht | — |
-| `docs/ROADMAP.md` | Zeile 31 | „den Dienst **optional** einrichten … Task Scheduler oder NSSM" | der Task-Scheduler-Weg ist mit Stufe 3 **entschieden** (ohne NSSM); die Zeile wird entsprechend umformuliert | 4b |
-
 ## Bekannte Lücken
 
-Stand 2026-11-16:
+Stand 2026-11-17, nach dem Schnitt:
 
 - **Windows ist kompiliert, nicht gelaufen.** Task Scheduler,
   `GetExtendedTcpTable`, `GetFileType` sind Betreiber-Messungen.

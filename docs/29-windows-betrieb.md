@@ -15,7 +15,10 @@ in `cmd.exe` gibt es beides nicht, und `find` ist dort ein anderes Programm
 scripts/check.mjs`; der Befehl meldet `checked 28 files` und endet mit 0, die
 Abnahme steht bei **658 Tests**, `# fail 0`, `# cancelled 0`, `# skipped 0`. Die
 sechs Kriterien sind einzeln geprüft, das Prüfskript läuft in 3,0–3,2 s (die alte
-`find`/`xargs`-Kette brauchte 2,8 s).
+`find`/`xargs`-Kette brauchte 2,8 s). **Die Zahl ist ein Messwert und wandert:** nach
+dem Schnitt von `docs/38` (Node-Bridge gelöscht, Stufe 4b, 2026-11-17) meldet
+derselbe Befehl `checked 14 files` — 19 der 33 Dateien waren Bridge-Code und
+Bridge-Tests.
 
 ## Ziel
 
@@ -94,7 +97,9 @@ getippt werden.
    `npm` vorher seinen eigenen Banner; gezählt wird die Zeile des Skripts. Die Zahl
    ist kein Vertrag, sondern ein Messwert: sie ist gleich der Zahl, die
    `find . -name .git -prune -o -name node_modules -prune -o -type f \( -name '*.js' -o -name '*.mjs' \) -print | wc -l`
-   im selben Arbeitsbaum liefert — heute 26, nach diesem Inkrement 28
+   im selben Arbeitsbaum liefert — heute **14** (gemessen 2026-11-17, nach dem
+   Schnitt von `docs/38`; vorher 33, weil 19 Dateien Bridge-Code und Bridge-Tests
+   waren). Bei der Abnahme dieser Spec waren es 26 → 28
    (`scripts/check.mjs`, `test/check.test.js`).
 2. **Kein Shell-Werkzeug mehr** (lokal). Weder in `package.json` noch in
    `scripts/check.mjs` kommt die Zeichenfolge `find ` oder `xargs` vor — auch nicht

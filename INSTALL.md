@@ -16,8 +16,10 @@ defaults and the acceptance criteria. This file says what to type.
 
 | Where | What |
 |---|---|
-| Server | **Node ≥ 22** (`node -v`). There are **no** dependencies — `npm install` is not needed |
-| Server | Linux with a systemd **user** session (recommended, not required) |
+| Server | The bridge **binary**, built with `cargo build --release --target x86_64-unknown-linux-musl` (`bridge-rs/README.md`, "Building"). `./scripts/install.sh` copies it to `~/.local/bin/browser-control-bridge` |
+| Server | Linux with a systemd **user** session (recommended, not required); on Windows the Task Scheduler (section 10) |
+| Build machine | Rust (`rustup`) with the targets `x86_64-unknown-linux-musl` and, for the Windows build, `x86_64-pc-windows-gnu` plus `mingw-w64` |
+| Tests only | **Node ≥ 22** (`node -v`) for `npm test`, `npm run check` and `scripts/parity.sh`. There are **no** dependencies — `npm install` is not needed. The service and `/mcp` never start Node |
 | Browser | **Firefox** with the profile you want the agent to use |
 | Both | The extension is **unsigned**; it is loaded as a *temporary* add-on |
 
@@ -105,14 +107,13 @@ outside `~/.config/browser-control/` and `~/.config/systemd/user/`.
 | *(none)* | install or repair, then check and say what is left to do |
 | `--dry-run` | announce every step; write nothing, start nothing |
 | `--print-token` | print the existing token and do nothing else |
-| `--fix-path` | install as usual and also write the `PATH` drop-in when `node` is not in `/usr/bin` |
 | `--uninstall` | stop and disable the service, remove the unit; **the token stays** |
 | `--help` | the options and what they do |
 
 | Exit code | Meaning |
 |---|---|
 | `0` | success |
-| `1` | aborted: a preflight check failed (Node ≥ 22, clone path, `$HOME`, ports `8110`/`8111`), an unknown option, the service was not `active` after the start, or a write target fell outside the two allowed directories |
+| `1` | aborted: a preflight check failed (the built binary is missing or not executable, the clone path, `$HOME`, ports `8110`/`8111`), an unknown option, the service was not `active` after the start, or a write target fell outside the allowed directories |
 | `2` | the token is missing or shorter than 32 hex characters — the same code the bridge uses |
 
 - **An existing token is never overwritten.** Rotation stays manual work (section
@@ -127,10 +128,16 @@ change a single step instead of running all of them.
 
 ### Try it by hand first
 
+The binary comes out of the build, not out of the installer:
+
 ```bash
 cd ~/browser-control
+. "$HOME/.cargo/env"
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl
+./scripts/install.sh                  # copies it to ~/.local/bin and sets the service up
 mkdir -p ~/.local/state/browser-control
-nohup node bridge/bridge.mjs >> ~/.local/state/browser-control/bridge.log 2>&1 < /dev/null &
+nohup "$HOME/.local/bin/browser-control-bridge" --http \
+  >> ~/.local/state/browser-control/bridge.log 2>&1 < /dev/null &
 ```
 
 The `< /dev/null` matters, it is not decoration: when stdin ends the bridge
@@ -142,19 +149,19 @@ Check:
 
 ```bash
 ss -ltn | grep 8110                # LISTEN … 127.0.0.1:8110
-tail -1 ~/.local/state/browser-control/bridge.log
+tail -2 ~/.local/state/browser-control/bridge.log
 # 2026-…Z listening on 127.0.0.1:8110 log=info
+# 2026-…Z listening on 127.0.0.1:8111 for POST /mcp
 ```
 
 For a manual check that includes the tab list, start it with
-`BC_LOG=debug nohup node bridge/bridge.mjs …`; the answer then appears as
-indented JSON in the log.
+`BC_LOG=debug` in front of the same command; the answer then appears as indented
+JSON in the log.
 
-Stop it with `kill <pid>`, or all instances:
-
-```bash
-for p in $(ps -eo pid,args | awk '/node bridge\/bridge\.mjs/ && !/awk/ {print $1}'); do kill "$p"; done
-```
+Stop it by **PID**: `kill <pid>`, with the PID from `ss -ltnp | grep 8110`. For the
+service, use `systemctl --user stop browser-control`. **Never** kill by pattern
+(`pkill -f browser-control-bridge`): a process you started by hand has exactly the
+same command line as the service, and the pattern cannot tell them apart.
 
 ### Run it as a systemd user service (recommended)
 
@@ -195,23 +202,22 @@ price of the service running **always**, even when nobody is there. If you are
 logged in most of the time you do not need it; the decision on 2026-10-23 was:
 **do not set it**.
 
-**If the service does not start and the journal says `env: node: No such file`:**
-a user unit's `PATH` is minimal, so an nvm installation (or pi's own Node) is
-invisible there. Then **do not** edit the repo's unit — create a local drop-in,
-so the unit stays machine-independent:
+**If the service does not start and the journal says `No such file or directory`
+for `%h/.local/bin/browser-control-bridge`:**
+the unit runs a **statically linked binary**, so there is no interpreter and no
+`PATH` involved any more — the file itself is missing. It comes from the build and
+from `./scripts/install.sh`, in that order:
 
 ```bash
-mkdir -p ~/.config/systemd/user/browser-control.service.d
-cat > ~/.config/systemd/user/browser-control.service.d/path.conf <<'EOF'
-[Service]
-Environment=PATH=%h/.local/share/pi-node/current/bin:/usr/local/bin:/usr/bin:/bin
-EOF
-systemctl --user daemon-reload && systemctl --user restart browser-control
+ls -l ~/.local/bin/browser-control-bridge            # -rwxr-xr-x
+cd ~/browser-control && . "$HOME/.cargo/env"
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl
+./scripts/install.sh
 ```
 
-Use the path `%h/.local/share/pi-node/current/bin` only if it exists
-(`command -v node`); otherwise put your own there. `current` is a symlink to the
-active version and survives a Node update.
+An older setup may still carry the `PATH` drop-in the Node bridge needed
+(`~/.config/systemd/user/browser-control.service.d/path.conf`). It is harmless but
+useless now; delete it if you want a clean unit.
 
 ### Configuration
 
@@ -394,12 +400,15 @@ Clients that can only spawn a process start the bridge themselves:
 {
   "mcpServers": {
     "browser-control": {
-      "command": "node",
-      "args": ["~/browser-control/bridge/bridge.mjs"]
+      "command": "/home/<you>/.local/bin/browser-control-bridge"
     }
   }
 }
 ```
+
+An **absolute** path, spelled out: most clients do not expand `~` in `command`, and
+the bridge then fails to start with no useful message. Without `--http` it does not
+bind `8111`; the extension socket on `8110` stays.
 
 This path does **not** run next to the service: port `8110` would be taken twice
 and the spawned bridge exits with `1`. For stdio, stop the service first
@@ -413,7 +422,8 @@ token.
 
 | Symptom | Look here |
 |---|---|
-| `env: node: No such file` in the journal | `PATH` of the user unit — see the drop-in in section 3 |
+| `No such file or directory` for the binary in the journal | the binary was never installed — build it and run `./scripts/install.sh` (section 3) |
+| `env: node: No such file` in the journal | an old unit from before the Rust port; replace it: `cp ~/browser-control/deploy/browser-control.service ~/.config/systemd/user/ && systemctl --user daemon-reload && systemctl --user restart browser-control` |
 | `status windows=… tabs=0` | Firefox has no agent tab yet; `browser_navigate` creates one |
 | Nothing in the log, no `extension connected` | extension console (`about:debugging` → “Inspect”), not the page console. `bc: background page started`, `bc: endpoint invalid: …`, or nothing at all. Silence usually means: the token is empty, or step 4.7 (the reload) was skipped |
 | `auth failed` in the bridge log | the token differs between file and extension options — section 2, “Rotating the token” |
@@ -482,6 +492,81 @@ request. Firefox speaks HTTP/1.1 for `wss://` anyway.
 | `401` | basic auth still catches it (auth at site level instead of the second `handle`) |
 | `426` | bridge alive, but it saw no upgrade request — almost always the missing `--http1.1` |
 | `502` | Caddy gets through, but the bridge is not listening on the upstream |
+
+## 10. Windows: the binary and the Task Scheduler
+
+Everything above describes a Linux host. On Windows the bridge is the same program
+as `browser-control-bridge.exe`: no systemd, no WSL, no service wrapper.
+
+1. **Build it** (on the machine or cross-compiled on Linux):
+
+   ```bash
+   cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-pc-windows-gnu
+   ```
+
+   The result is `bridge-rs/target/x86_64-pc-windows-gnu/release/browser-control-bridge.exe`.
+
+2. **Copy it to the place the task expects** (`%LOCALAPPDATA%\browser-control\` —
+   the operator's own directory, no admin rights involved). Repeat after every
+   rebuild:
+
+   ```powershell
+   New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\browser-control"
+   Copy-Item bridge-rs\target\x86_64-pc-windows-gnu\release\browser-control-bridge.exe "$env:LOCALAPPDATA\browser-control\"
+   ```
+
+3. **Write the token** (section 2, same path under `%USERPROFILE%`). Do **not** use
+   PowerShell's `>`: it writes UTF-16 with a BOM, and the bridge needs plain hex.
+
+   ```powershell
+   $d = Join-Path $env:USERPROFILE ".config\browser-control"
+   New-Item -ItemType Directory -Force $d | Out-Null
+   $bytes = New-Object byte[] 32
+   [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+   -join ($bytes | ForEach-Object { $_.ToString("x2") }) | Set-Content -NoNewline (Join-Path $d "token")
+   ```
+
+   Spelled out instead of `[Convert]::ToHexString`: that method exists only from
+   PowerShell 7 on, and the older Windows PowerShell 5.1 is what ships with Windows.
+
+4. **Try it in a console first** — the console is the normal case, the task is the
+   comfortable one:
+
+   ```powershell
+   & "$env:LOCALAPPDATA\browser-control\browser-control-bridge.exe" --http
+   ```
+
+   Two lines appear (`listening on 127.0.0.1:8110 log=info` and
+   `listening on 127.0.0.1:8111 for POST /mcp`), **stdout stays empty**, and
+   `Ctrl+C` ends it with `received SIGINT, shutting down` and exit `0`.
+
+5. **Register the scheduled task** — `AtLogOn`, `InteractiveToken`,
+   `LeastPrivilege`, no restart on failure (the equivalent of
+   `RestartPreventExitStatus=2`: a missing token heals no restart):
+
+   ```powershell
+   schtasks /Create /XML "$env:USERPROFILE\browser-control\deploy\windows\browser-control-bridge.xml" /TN browser-control-bridge
+   schtasks /Run /TN browser-control-bridge
+   schtasks /Query /TN browser-control-bridge /FO LIST     # Status: Running
+   ```
+
+6. **Check it** like section 5, with `curl` from PowerShell:
+
+   ```powershell
+   $t = Get-Content "$env:USERPROFILE\.config\browser-control\token" -Raw
+   curl.exe -s -X POST -H "Authorization: Bearer $t" -H 'Content-Type: application/json' `
+     -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' http://127.0.0.1:8111/mcp
+   ```
+
+   The extension uses `ws://127.0.0.1:8110` (section 4) — the local default, no
+   Caddy needed on a single machine. Stop the task with
+   `schtasks /End /TN browser-control-bridge`.
+
+**What is measured and what is not:** the Windows build is compiled
+(`docs/38`, stage 3) and the pure decoding of the port owner is tested on Linux;
+the Task Scheduler definition, `GetExtendedTcpTable` and `GetFileType` at runtime
+are the operator's measurement. `bridge-rs/README.md` (`## Windows`) lists the
+four probes.
 
 ## Not covered
 
