@@ -271,8 +271,10 @@ Then in Firefox:
 3. **Select `extension/manifest.json`** (in the clone:
    `~/browser-control/extension/manifest.json`) — not the folder, not a single
    file.
-4. Right-click the icon → **“Manage Extension”** (or `about:addons` → Browser
-   Control → Preferences).
+4. Open `about:addons` in a new tab, select **Browser Control**, then select
+   **Preferences**. `about:debugging` shows only “Reload” and “Remove” for a
+   temporary add-on — it has no link to the settings. (An extension icon may not
+   be in the toolbar either; `about:addons` is the reliable route.)
 5. The **endpoint** field **is pre-filled with** `ws://127.0.0.1:8110` — the
    address the bridge listens on unless you set `BC_BIND`. Leave it as it is
    while bridge and Firefox run on the same machine; change it only when the

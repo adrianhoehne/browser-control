@@ -51,17 +51,25 @@ Die Schritte, in dieser Reihenfolge:
 3. „Load Temporary Add-on…” wählen.
 4. Im Dateidialog **die XPI-Datei** aus dem entpackten Ordner auswählen
    (`browser-control-<version>.xpi`).
-5. Die Einstellungen der Erweiterung öffnen.
+5. **`about:addons`** in einem neuen Tab öffnen, **Browser Control** wählen,
+   dann **Preferences**. `about:debugging` hat für ein temporäres Add-on keinen
+   Einstellungs-Link — das ist der Punkt, an dem ein neuer Nutzer sonst hängt.
 6. Als Endpunkt `ws://127.0.0.1:8110` eintragen.
 7. Das Token aus der Zeile `token: …` des Startfensters eintragen.
 8. Speichern.
-9. Die Erweiterung in `about:debugging` einmal neu laden.
+9. Die Erweiterung in `about:debugging` einmal neu laden (**Reload** neben
+   Browser Control).
 
 **Die Warnung steht als Kasten zwischen Schritt 1 und 2**, direkt vor dem
 Laden — „The extension is temporary. After a Firefox restart it is gone. Repeat
-steps 3 to 9. The endpoint and the token stay saved." Sie ist **kein**
-numerierter Schritt: sonst verschöben sich alle Nummern und der Verweis „repeat
-steps 3 to 9" zeigte auf die falschen Schritte.
+steps 2 to 4. Firefox keeps the endpoint and the token in the profile; if the
+connection fails after a reload, check them." Sie ist **kein** numerierter
+Schritt: sonst verschöben sich alle Nummern und der Verweis auf die Schritte
+zeigte auf die falschen.
+
+**Warum Schritt 5 über `about:addons` geht:** `about:debugging` zeigt für ein
+temporäres Add-on nur **Reload** und **Remove**, keinen Einstellungs-Link
+(Betreiber-Fund vom 2026-11-17). Die Optionsseite hängt an der Add-on-Verwaltung.
 
 Ein Schlusssatz: dass im Startfenster `endpoint:` und `http:` stehen und welche
 Adresse wofür gilt (Extension bekommt `ws://…:8110`, der MCP-Client
