@@ -37,8 +37,8 @@ der Anleitung.
   die Regeln — nummerierte Schritte, Befehlsform, höchstens 20 Wörter.
 - **Die Anleitungen haben eine Quelle.** Sie liegen im Repo und werden vom
   Bündel-Skript ins Zip kopiert — keine zwei Fassungen, die auseinanderlaufen.
-- **Der Release hängt die Zips an.** Ein Tag `v*` baut beide und legt sie ans
-  GitHub-Release; ohne das wäre „Release herunterladen" eine Behauptung.
+- **Der Release hängt die Zips an** — das ist `docs/40` (Job `release`), nicht
+  diese Spec. Hier entstehen nur die Dateien.
 
 ## Non-goals
 
@@ -86,7 +86,9 @@ sonst gleich.
    token: <64 hex>
    ```
 
-   (Ports aus `BC_BIND`/`BC_HTTP_PORT`, sichtbar als das, was gilt.) Danach
+   Ports aus `BC_BIND`/`BC_HTTP_PORT`, sichtbar als das, was gilt. Eine
+   Wildcard-Adresse (`0.0.0.0`, `::`) wird als `127.0.0.1` gedruckt — was nicht
+   dialbar ist, wird nicht angezeigt. Danach
    `exec` auf das Binary mit `--http`. Kein `nohup`, keine PID-Datei: das Skript
    ist der Prozess, Strg+C beendet ihn.
 
@@ -119,9 +121,15 @@ sind Nutzertexte, keine Specs — `docs/README.md` regelt Spec-Dateien,
 
 1. Der Server läuft (`start.sh`), der Endpunkt ist `http://127.0.0.1:8111/mcp`,
    das Token steht in `data/token`.
-2. **pi** — Eintrag in `~/.pi/agent/mcp.json`:
-   `url` = der Endpunkt, `headers.Authorization` = `!echo Bearer $(cat <pfad>/data/token)`
-   (der `!`-Wert liest das Token beim Start, statt es in die Datei zu schreiben).
+2. **pi** — Eintrag in `~/.pi/agent/mcp.json`, **mit** der Hülle:
+
+   ```json
+   { "mcpServers": { "browser-control": {
+       "url": "http://127.0.0.1:8111/mcp",
+       "headers": { "Authorization": "!echo Bearer $(cat <pfad>/data/token)" } } } }
+   ```
+
+   Der `!`-Wert liest das Token beim Start, statt es in die Datei zu schreiben.
 3. **Codex** — `codex mcp add browser-control --url http://127.0.0.1:8111/mcp --bearer-token-env-var BC_TOKEN`,
    dazu die Zeile, die `BC_TOKEN` in der Shell setzt.
 4. **OpenCode** — `opencode mcp add browser-control --url http://127.0.0.1:8111/mcp --header "Authorization=Bearer <token>"`,
@@ -148,7 +156,7 @@ aus `scripts/package.sh`.
 | `test/bundle/bundle.test.js` | `bundle_linuxZip_shouldContainExactlyTheSevenEntries` | sechs Dateien (Binary, XPI, `start.sh`, `README.txt`, `FIREFOX.md`, `CLIENTS.md`) plus Ordner-Eintrag — und nichts sonst (kein `data/`, kein `target/`, keine `.git`) |
 | `test/bundle/bundle.test.js` | `bundle_windowsZip_shouldContainTheExeAndTheCmd` | dieselbe Liste mit `.exe` und `start.cmd` |
 | `test/bundle/bundle.test.js` | `bundle_shouldNotCarryAToken` | kein Eintrag enthält 32+ Hex-Zeichen; das Token entsteht erst beim Start |
-| `test/bundle/bundle.test.js` | `startSh_shouldCreateTheTokenOnceAndKeepIt` | erster Lauf legt `data/token` an (0600, 64 Hex), zweiter Lauf lässt es unverändert |
+| `test/bundle/bundle.test.js` | `startSh_shouldCreateTheTokenOnceAndKeepIt` | erster Lauf legt `data/token` an (0600, 64 Hex), zweiter Lauf lässt es unverändert; jeder Lauf bindet einen freien Port außerhalb 18110–18119 und wird per PID beendet |
 | `test/bundle/bundle.test.js` | `startSh_shouldRefuseATooShortToken` | ein vorhandenes 8-Zeichen-Token führt zu Exit **2** (die Bridge-Regel, nicht eine eigene) |
 | `test/bundle/bundle.test.js` | `startSh_shouldNotWriteOutsideItsFolder` | nach dem Lauf ist außerhalb des entpackten Ordners nichts Neues (Sandbox-`HOME`) |
 | `test/bundle/bundle.test.js` | `startSh_shouldNotDeriveTheTokenFromTimeOrPid` | zwei frische Ordner ⇒ zwei **verschiedene** Tokens (kein `$RANDOM`, kein `date`) |
@@ -157,42 +165,55 @@ aus `scripts/package.sh`.
 
 1. **Zwei Zips aus einem Befehl.** `scripts/bundle.sh` ⇒
    `dist/browser-control-<version>-linux-x86_64.zip` und
-   `…-windows-x86_64.zip`; `unzip -l` zeigt je **sieben** Einträge: **sechs
+   `…-windows-x86_64.zip`; `unzip -Z1 <zip> | wc -l` ⇒ **7**: **sechs
    Dateien** (Binary, XPI, `start.sh`, `README.txt`, `FIREFOX.md`, `CLIENTS.md`)
    **plus den Ordner-Eintrag** der obersten Ebene — kein `data/`, keine
    `target/`-Reste, keine `.git`.
 2. **Kein Geheimnis im Zip.** `unzip -Z1 … | grep -cE '(^|/)data/'` ⇒ 0 und
    `unzip -p … start.sh | grep -acE '[0-9a-f]{32,}'` ⇒ 0.
 3. **Es läuft ohne Installation.** In einem temporären Ordner entpackt, mit
-   **freien Ports** (auf dem Betreiber-Rechner gehören 8110/8111 dem Dienst):
-   `BC_BIND=127.0.0.1:18117 BC_HTTP_PORT=18118 ./start.sh & PID=$!` ⇒ das Log
-   enthält (Teilstring, mit Zeitstempel davor) `listening on 127.0.0.1:18117
-   log=info` **und** `listening on 127.0.0.1:18118 for POST /mcp`; `data/token`
+   **freien Ports außerhalb der reservierten Bereiche** — 8110/8111 gehören dem
+   Dienst, 18110–18119 den Test-Suiten (`bridge-rs/tests/common/mod.rs`):
+   `BC_BIND=127.0.0.1:18130 BC_HTTP_PORT=18131 ./start.sh & PID=$!` ⇒ das Log
+   enthält (Teilstring, mit Zeitstempel davor) `listening on 127.0.0.1:18130
+   log=info` **und** `listening on 127.0.0.1:18131 for POST /mcp`; `data/token`
    existiert mit 0600 und 64 Zeichen; `curl -s -o /dev/null -w '%{http_code}'
-   -X POST http://127.0.0.1:18118/mcp` ⇒ `401` (ohne Token) bzw. `200` (mit
+   -X POST http://127.0.0.1:18131/mcp` ⇒ `401` (ohne Token) bzw. `200` (mit
    Token). **Beenden: `kill $PID`** — niemals `pkill -f`, das trifft den Dienst
    (`CONTRIBUTING.md`).
-4. **Nichts außerhalb des Ordners.** Vor dem Lauf eine Marker-Datei anlegen
-   (`touch "$SANDBOX/marker"`), nach dem Lauf `find "$SANDBOX" -newer
-   "$SANDBOX/marker" -print` ⇒ leer; und die Prüfsumme der echten
-   `~/.config/browser-control/token` ist vor und nach dem Lauf gleich
-   (`sha256sum` beideausgeben, vergleichen). Schreibvorgänge in `/tmp` und
+4. **Nichts außerhalb des Ordners.** Der Lauf startet mit
+   `HOME="$SANDBOX/home"`. Vorher `touch "$SANDBOX/marker"`, nachher
+   `find "$SANDBOX" -newer "$SANDBOX/marker" -not -path "$SANDBOX/browser-control-*"
+   -not -name 'run.log' -print` ⇒ **leer** — was das Skript in seinem eigenen
+   Ordner anlegt, ist erlaubt. Zusätzlich ist die Prüfsumme der echten
+   `~/.config/browser-control/token` vor und nach dem Lauf gleich
+   (`sha256sum` auf beiden Seiten vergleichen). Schreibvorgänge in `/tmp` und
    `XDG_*` sind nicht Vertragsgegenstand.
-5. **Das Token überlebt.** Zweiter Start ⇒ `grep -c '^token: '` liefert dieselben
-   64 Zeichen wie beim ersten (Vergleich über die Datei), `cmp` auf eine Kopie
-   ⇒ identisch; `stat -c %a` ⇒ `600`.
-6. **Die Anleitungen sind vollständig.** Beweis (Struktur, nicht Stil):
+5. **Das Token überlebt.** Vorher `kill $PID` aus Kriterium 3 (sonst ist der
+   Port belegt). Zweiter Start ⇒ `grep -c '^token: '` liefert dieselben 64
+   Zeichen wie beim ersten, `cmp` auf eine Kopie von
+   `<ordner>/data/token` ⇒ identisch; `stat -c %a <ordner>/data/token` ⇒ `600`.
+6. **Die drei gedruckten Zeilen stimmen mit den Ports.** `grep -c
+   '^endpoint: ws://127.0.0.1:18130$' <log>` ⇒ **1**, `grep -c
+   '^http: http://127.0.0.1:18131/mcp$' <log>` ⇒ **1**, `grep -cE '^token:
+   [0-9a-f]{64}$' <log>` ⇒ **1**. Ein Skript, das 8110 druckt und auf 18130
+   lauscht, fällt hier durch — das ist der teuerste Fehler, den das Paket machen
+   könnte.
+7. **Die Anleitungen sind vollständig.** Beweis (Struktur, nicht Stil):
    `grep -c '^1\.' docs/portable/FIREFOX.md docs/portable/CLIENTS.md` ⇒ je **1**
    (jede Anleitung beginnt mit Schritt 1), und `grep -c '^[0-9]\+\. ' …` ⇒ je
    **≥ 5**. Die Regeln selbst prüft niemand automatisch.
-7. **Beide Zips tragen dieselbe Version**, und die kommt aus **einer** Quelle:
+8. **Beide Zips tragen dieselbe Version**, und die kommt aus **einer** Quelle:
    `extension/manifest.json` (`scripts/package.sh` liest sie dort schon).
    Beweis: `unzip -l dist/browser-control-<v>-linux-x86_64.zip | grep -c
    'browser-control-<v>.xpi'` ⇒ 1, dasselbe für das Windows-Zip, und
    `<v>` = `node -p 'require("./extension/manifest.json").version'`.
-8. **Der Rest bleibt grün.** `npm test` ⇒ `# fail 0`, `# cancelled 0`,
-   `# skipped 0`; `npm run check` ⇒ 0; `scripts/parity.sh --impl rust --check`
-   ⇒ 7/7, Exit 0; Secret-Grep beidseitig Exit 1.
+9. **Der Rest bleibt grün.** `npm test` ⇒ `# fail 0`, `# cancelled 0`,
+   `# skipped 0`; `npm run check` ⇒ 0; `npm run test:bundle` ⇒ `# fail 0`;
+   Secret-Grep beidseitig Exit 1.
+10. **`start.cmd` ist Windows-tauglich.** `unzip -p <win-zip> start.cmd | grep -c
+    $'\r'` ⇒ **> 0** (CRLF) und `unzip -p <win-zip> start.cmd | grep -c
+    'Get-Random'` ⇒ **0** (CSPRNG, nicht der Zufall der Shell).
 
 ## Dev plan
 
@@ -203,7 +224,9 @@ Dateien: `deploy/portable/start.sh`, `deploy/portable/start.cmd`,
 Bündel-Skript: `bundle.sh`, nicht „Bundel").
 
 `start.sh` erfüllt den Vertrag oben; `start.cmd` dasselbe für Windows. `bundle.sh`
-baut nichts (das Binary muss gebaut sein, sonst Exit 1 mit dem Befehl), ruft
+baut nichts: es nimmt das Binary aus `bridge-rs/target/<ziel>/release/` oder
+aus `--binary <pfad>` (so kommt es in CI als Artefakt an) und endet mit
+Exit 1, wenn keins da ist; es ruft
 `scripts/package.sh` für die XPI, kopiert die Vorlagen, setzt `0755` auf
 `start.sh`, schreibt die Zips und prüft den Inhalt gegen die Soll-Liste.
 
@@ -232,15 +255,17 @@ von einem gebauten Binary abhängig.
 
 Beweis: `npm run test:bundle` ⇒ `# fail 0`, `# skipped 0`.
 
-**Stufe 4 — Release-Anhang und Doku**
+Die **Startvorlagen und `README.txt`** liegen unter `deploy/portable/`, die
+**Anleitungen** unter `docs/portable/`; `bundle.sh` kopiert aus beiden Bäumen.
 
-Dateien: `.github/workflows/release.yml` (Job `release` bei Tag `v*`, Details in
-`docs/40-ci-ablauf.md`), `README.md` (ein Absatz „Portable, no installation"),
-`INSTALL.md` (Verweis auf das Zip als kürzesten Weg), `docs/README.md`
-(Status-Zelle), `docs/PROJECT-STATE.md`, `CHANGELOG.md`.
+**Stufe 4 — Doku**
 
-Beweis: der Betreiber-Push mit Tag zeigt die Zips am Release — der einzige
-Beweis, den niemand lokal führen kann; lokal prüft `docs/40` den Rest.
+Dateien: `README.md` (ein Absatz „Portable, no installation"), `INSTALL.md`
+(Verweis auf das Zip als kürzesten Weg), `docs/README.md` (Status-Zelle),
+`docs/PROJECT-STATE.md`, `CHANGELOG.md`.
+
+Beweis: `grep -c 'linux-x86_64.zip' README.md INSTALL.md` ⇒ je ≥ 1; der
+Release-Anhang selbst ist `docs/40`.
 
 ## Bekannte Lücken
 
@@ -260,7 +285,25 @@ entschieden.
 
 ## Review
 
-### Runde 1 — steht aus
+### Runde 1 — 2026-11-17, `grizzled-senior-dev`: 🔧, Blocker dabei
+
+Acht Blocker: zwei Inkremente in einer Spec (Zip **und** CI); die Bundle-Tests
+hätten `npm test` an ein gebautes Binary gebunden; `data/` stand gleichzeitig im
+Zip-Baum und im Verbot; das Lint-Kriterium verlangte einen Befund, den der
+Linter nicht liefert; dem `bundle`-Job fehlten die Binaries; `npm test` und der
+`node`-Job waren unvereinbar; die Release-Credentials fehlten; die
+Runde-1-Zeile im Log war rückdatiert.
+
+### Runde 2 — 2026-11-17, `grizzled-senior-dev`: 🔧, Blocker dabei
+
+Fünf Blocker: `## Review` behauptete „steht aus", während der Log keinen der acht
+Befunde beantwortete; Kriterium 4 („nichts außerhalb") konnte in einer korrekten
+Umsetzung nicht leer werden, weil der entpackte Ordner **in** der Sandbox liegt;
+der Release stand in beiden Specs; die Prüfports 18117/18118 lagen im
+reservierten Bereich 18110–18119; die drei gedruckten Zeilen wurden von keinem
+Kriterium entschieden.
+
+### Runde 3 — steht aus
 
 ## Log
 
@@ -272,3 +315,19 @@ entschieden.
   Prüfskript im Repo).
 - **2026-11-17, Betreiberentscheid:** MCP-Hauptweg ist der **HTTP-Endpunkt**;
   Clients pi, Codex, OpenCode plus ein generisches Muster.
+- **Runde 1 — übernommen:** CI abgespalten (`docs/40`); Testdatei nach
+  `test/bundle/` mit eigenem Skript `test:bundle`, damit `npm test` binary-frei
+  bleibt; `data/` nur noch als Laufzeit-Ordner beschrieben; Lint-Kriterium
+  ersetzt (STE100 ist Schreibregel); Binaries per `upload-artifact` im
+  `unit`-Job; `--test-threads=1`; `permissions: contents: write` und
+  `gh release create` (in `docs/40`). **Nicht** übernommen: eigene
+  Release-Spec — der Anhang ist Teil des CI-Inkrements.
+- **Runde 2 — übernommen:** Review-Runden mit Datum und Verdict eingetragen;
+  Kriterium 4 schließt den entpackten Ordner und `run.log` aus und setzt
+  `HOME="$SANDBOX/home"`; Release aus Ziel und Stufe 4 entfernt (zeigt auf
+  `docs/40`); Prüfports 18130/18131 außerhalb 18110–18119; Kriterium 6 prüft die
+  drei gedruckten Zeilen gegen die laufenden Ports; `unzip -Z1 | wc -l` statt
+  `unzip -l`; Kriterium 5 killt vorher und nennt den Tokenpfad; `start.cmd` hat
+  ein Kriterium (CRLF, kein `Get-Random`); `bundle.sh --binary <pfad>`;
+  pi-Eintrag mit `mcpServers`-Hülle; Wildcard-Adressen werden als `127.0.0.1`
+  gedruckt; ein Satz zu den zwei Quellordnern; Tippfehler behoben.
