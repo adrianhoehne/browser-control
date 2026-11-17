@@ -1,5 +1,5 @@
 ---
-description: Ein portables Zip — Server-Binary, XPI und zwei Anleitungen (Firefox, MCP-Clients) in Englisch nach STE100; entpacken, starten, fertig, ohne Installation, ohne Root, ohne Dienst.
+description: Ein portables Zip — Startskripte, die das Token im Ordner anlegen, das Server-Binary, die XPI und zwei Anleitungen; entpacken, starten, fertig, ohne Installation, ohne Root, ohne Dienst.
 status: proposed
 ---
 
@@ -100,43 +100,10 @@ Token aus einem CSPRNG, nicht aus `Get-Random`:
 
 ## Die zwei Anleitungen
 
-Beide **Englisch**, **ASD-STE100**: nummerierte Schritte, Befehlsform, höchstens
-20 Wörter je Anweisung, ein Name je Sache, Warnung **vor** dem Schritt. Sie
-liegen im Repo unter `docs/portable/` (kein `NN-`-Präfix und kein Frontmatter: es
-sind Nutzertexte, keine Specs — `docs/README.md` regelt Spec-Dateien,
-`scripts/check.mjs` prüft nur Code) und werden ins Zip kopiert.
-
-**`FIREFOX.md` — was drinstehen muss:**
-
-1. Firefox starten.
-2. `about:debugging#/runtime/this-firefox` öffnen.
-3. „Load Temporary Add-on…" wählen und **die XPI-Datei** auswählen.
-4. Die Einstellungen der Erweiterung öffnen, Endpunkt `ws://127.0.0.1:8110` und
-   das Token aus dem Startfenster eintragen, speichern.
-5. Die Erweiterung in `about:debugging` einmal neu laden.
-6. Warnung: die Erweiterung ist **temporär** und nach einem Firefox-Neustart
-   weg — Schritt 3 wiederholen. (Der Endpunkt und das Token bleiben gespeichert.)
-
-**`CLIENTS.md` — was drinstehen muss:**
-
-1. Der Server läuft (`start.sh`), der Endpunkt ist `http://127.0.0.1:8111/mcp`,
-   das Token steht in `data/token`.
-2. **pi** — Eintrag in `~/.pi/agent/mcp.json`, **mit** der Hülle:
-
-   ```json
-   { "mcpServers": { "browser-control": {
-       "url": "http://127.0.0.1:8111/mcp",
-       "headers": { "Authorization": "!echo Bearer $(cat <pfad>/data/token)" } } } }
-   ```
-
-   Der `!`-Wert liest das Token beim Start, statt es in die Datei zu schreiben.
-3. **Codex** — `codex mcp add browser-control --url http://127.0.0.1:8111/mcp --bearer-token-env-var BC_TOKEN`,
-   dazu die Zeile, die `BC_TOKEN` in der Shell setzt.
-4. **OpenCode** — `opencode mcp add browser-control --url http://127.0.0.1:8111/mcp --header "Authorization=Bearer <token>"`,
-   mit dem Hinweis, dass dieser Client das Token in seiner Konfiguration ablegt.
-5. **Generisches Muster** — ein JSON- und ein TOML-Ausschnitt für Clients, die
-   hier nicht genannt sind (Server-URL, Kopfzeile `Authorization: Bearer …`).
-6. Ein Schlusssatz: dasselbe Token gilt für Firefox **und** den Client.
+Das Zip trägt `FIREFOX.md` und `CLIENTS.md`. **Ihr Inhalt und ihre Prüfung stehen
+in `docs/41-anleitungen.md`** (abgespalten am 2026-11-17, `CONTRIBUTING.md`
+Schritt 4). Hier zählen nur zwei Dinge: die Dateien liegen im Zip, und sie kommen
+aus `docs/portable/` — eine Quelle, keine zweite Fassung.
 
 ## Abgrenzung
 
@@ -174,14 +141,18 @@ aus `scripts/package.sh`.
 3. **Es läuft ohne Installation.** In einem temporären Ordner entpackt, mit
    **freien Ports außerhalb der reservierten Bereiche** — 8110/8111 gehören dem
    Dienst, 18110–18119 den Test-Suiten (`bridge-rs/tests/common/mod.rs`):
-   `BC_BIND=127.0.0.1:18130 BC_HTTP_PORT=18131 ./start.sh & PID=$!` ⇒ das Log
-   enthält (Teilstring, mit Zeitstempel davor) `listening on 127.0.0.1:18130
-   log=info` **und** `listening on 127.0.0.1:18131 for POST /mcp`; `data/token`
-   existiert mit 0600 und 64 Zeichen; `curl -s -o /dev/null -w '%{http_code}'
-   -X POST http://127.0.0.1:18131/mcp` ⇒ `401` (ohne Token) bzw. `200` (mit
-   Token). **Beenden: `kill $PID`** — niemals `pkill -f`, das trifft den Dienst
-   (`CONTRIBUTING.md`).
-4. **Nichts außerhalb des Ordners.** Der Lauf startet mit
+   `BC_BIND=127.0.0.1:18130 BC_HTTP_PORT=18131 ./start.sh > run.log 2>&1 &
+   PID=$!` (stdout und stderr zusammen, weil das Skript die drei Zeilen auf
+   stdout druckt und die Bridge auf stderr loggt) ⇒ `run.log` enthält
+   (Teilstring, mit Zeitstempel davor) `listening on 127.0.0.1:18130 log=info`
+   **und** `listening on 127.0.0.1:18131 for POST /mcp`; `data/token` existiert
+   mit 0600 und 64 Zeichen; **ohne** Token ⇒ `curl -s -o /dev/null -w
+   '%{http_code}' -X POST http://127.0.0.1:18131/mcp` = `401`; **mit** Token ⇒
+   `curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer
+   $(cat <ordner>/data/token)" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+   http://127.0.0.1:18131/mcp` = `200`. **Beenden: `kill $PID`** — niemals
+   `pkill -f`, das trifft den Dienst (`CONTRIBUTING.md`).
+4. **Nichts außerhalb des Ordners.** Nach `$SANDBOX` entpackt, startet der Lauf mit
    `HOME="$SANDBOX/home"`. Vorher `touch "$SANDBOX/marker"`, nachher
    `find "$SANDBOX" -newer "$SANDBOX/marker" -not -path "$SANDBOX/browser-control-*"
    -not -name 'run.log' -print` ⇒ **leer** — was das Skript in seinem eigenen
@@ -194,22 +165,22 @@ aus `scripts/package.sh`.
    Zeichen wie beim ersten, `cmp` auf eine Kopie von
    `<ordner>/data/token` ⇒ identisch; `stat -c %a <ordner>/data/token` ⇒ `600`.
 6. **Die drei gedruckten Zeilen stimmen mit den Ports.** `grep -c
-   '^endpoint: ws://127.0.0.1:18130$' <log>` ⇒ **1**, `grep -c
-   '^http: http://127.0.0.1:18131/mcp$' <log>` ⇒ **1**, `grep -cE '^token:
-   [0-9a-f]{64}$' <log>` ⇒ **1**. Ein Skript, das 8110 druckt und auf 18130
+   '^endpoint: ws://127.0.0.1:18130$' run.log` ⇒ **1**, `grep -c
+   '^http: http://127.0.0.1:18131/mcp$' run.log` ⇒ **1**, `grep -cE '^token:
+   [0-9a-f]{64}$' run.log` ⇒ **1**. Ein Skript, das 8110 druckt und auf 18130
    lauscht, fällt hier durch — das ist der teuerste Fehler, den das Paket machen
    könnte.
-7. **Die Anleitungen sind vollständig.** Beweis (Struktur, nicht Stil):
-   `grep -c '^1\.' docs/portable/FIREFOX.md docs/portable/CLIENTS.md` ⇒ je **1**
-   (jede Anleitung beginnt mit Schritt 1), und `grep -c '^[0-9]\+\. ' …` ⇒ je
-   **≥ 5**. Die Regeln selbst prüft niemand automatisch.
+7. **Die Anleitungen liegen im Zip.** `unzip -Z1 <zip> | grep -cE
+   '/(FIREFOX|CLIENTS)\.md$'` ⇒ **2**; ihr Inhalt ist `docs/41`.
 8. **Beide Zips tragen dieselbe Version**, und die kommt aus **einer** Quelle:
    `extension/manifest.json` (`scripts/package.sh` liest sie dort schon).
    Beweis: `unzip -l dist/browser-control-<v>-linux-x86_64.zip | grep -c
    'browser-control-<v>.xpi'` ⇒ 1, dasselbe für das Windows-Zip, und
    `<v>` = `node -p 'require("./extension/manifest.json").version'`.
-9. **Der Rest bleibt grün.** `npm test` ⇒ `# fail 0`, `# cancelled 0`,
-   `# skipped 0`; `npm run check` ⇒ 0; `npm run test:bundle` ⇒ `# fail 0`;
+9. **Der Rest bleibt grün.** `npm test` ⇒ `# fail 0`, `# cancelled 0`
+   (`# skipped` hängt an `zip`/`unzip` auf der Maschine — `test/package.test.js`
+   überspringt ohne sie); `npm run check` ⇒ 0; `npm run test:bundle` ⇒
+   `# fail 0`;
    Secret-Grep beidseitig Exit 1.
 10. **`start.cmd` ist Windows-tauglich.** `unzip -p <win-zip> start.cmd | grep -c
     $'\r'` ⇒ **> 0** (CRLF) und `unzip -p <win-zip> start.cmd | grep -c
@@ -224,24 +195,21 @@ Dateien: `deploy/portable/start.sh`, `deploy/portable/start.cmd`,
 Bündel-Skript: `bundle.sh`, nicht „Bundel").
 
 `start.sh` erfüllt den Vertrag oben; `start.cmd` dasselbe für Windows. `bundle.sh`
-baut nichts: es nimmt das Binary aus `bridge-rs/target/<ziel>/release/` oder
-aus `--binary <pfad>` (so kommt es in CI als Artefakt an) und endet mit
-Exit 1, wenn keins da ist; es ruft
+baut nichts: es nimmt je Ziel ein Binary aus `bridge-rs/target/<ziel>/release/`
+oder aus `--binary <ziel>=<pfad>` (zweimal angebbar; so kommen sie in CI als
+Artefakt an) und endet mit Exit 1, wenn eines fehlt; es ruft
 `scripts/package.sh` für die XPI, kopiert die Vorlagen, setzt `0755` auf
 `start.sh`, schreibt die Zips und prüft den Inhalt gegen die Soll-Liste.
 
-Beweis: `bash scripts/bundle.sh` ⇒ zwei Zips; `unzip -l` zeigt die Soll-Liste;
-`bash -n deploy/portable/start.sh` ⇒ 0.
+Beweis: `bash scripts/bundle.sh` ⇒ zwei Zips; `unzip -Z1 <zip> | wc -l` ⇒ 7 je
+Zip; `bash -n deploy/portable/start.sh` ⇒ 0.
 
-**Stufe 2 — Die zwei Anleitungen**
+**Stufe 2 — Die zwei Anleitungen — eigene Spec `docs/41`**
 
-Dateien: `docs/portable/FIREFOX.md`, `docs/portable/CLIENTS.md`.
-
-Inhalt nach dem Abschnitt oben, Englisch, STE100 — als Schreibregel, ohne
-Prüfskript.
-
-Beweis: Kriterium 6 (Struktur) und ein Probelauf durch den Betreiber: Zip
-entpacken, Anleitung abarbeiten, Seite öffnen.
+Die Inhalte der Anleitungen (`FIREFOX.md`, `CLIENTS.md`) stehen ab dem Teilen
+vom 2026-11-17 in `docs/41-anleitungen.md`; hier bleiben nur die Dateinamen als
+Zip-Inhalt. Der Abschnitt `## Die zwei Anleitungen` beschreibt weiterhin, was im
+Zip liegt, aber nicht mehr, wie der Text entsteht.
 
 **Stufe 3 — Tests**
 
@@ -303,7 +271,19 @@ der Release stand in beiden Specs; die Prüfports 18117/18118 lagen im
 reservierten Bereich 18110–18119; die drei gedruckten Zeilen wurden von keinem
 Kriterium entschieden.
 
-### Runde 3 — steht aus
+### Runde 3 — 2026-11-17, `grizzled-senior-dev`: 🔧, Blocker dabei
+
+Fünf Blocker, alle Einzeiler: ein `--binary` für zwei Ziele; `<log>` existierte
+in keinem Kriterium; Stufe 2 zeigte auf das falsche Kriterium; der „mit
+Token"-Aufruf fehlte; `# skipped 0` hing an `zip`/`unzip`. Dazu zwei
+Nacharbeiten.
+
+**Folge: geteilt, nicht durchgewinkt** (`CONTRIBUTING.md`, Schritt 4). Die
+Anleitungen sind `docs/41-anleitungen.md`, der CI-Ablauf `docs/40-ci-ablauf.md`.
+Diese Datei beschreibt seither nur das Zip; die Rundenzählung beginnt mit dem
+neuen Zuschnitt neu.
+
+### Runde 4 (neuer Zuschnitt) — steht aus
 
 ## Log
 
@@ -322,6 +302,11 @@ Kriterium entschieden.
   `unit`-Job; `--test-threads=1`; `permissions: contents: write` und
   `gh release create` (in `docs/40`). **Nicht** übernommen: eigene
   Release-Spec — der Anhang ist Teil des CI-Inkrements.
+- **Runde 3 — übernommen, dann geteilt:** `--binary <ziel>=<pfad>` (zweimal
+  angebbar); `run.log` als feste Logdatei in den Kriterien 3, 5 und 6; der
+  „mit Token"-Aufruf ausgeschrieben; Stufe-1-Beweis mit `unzip -Z1 | wc -l`;
+  `# skipped` nicht mehr gepinnt (hängt an `zip`/`unzip`); Kriterium 4 nennt den
+  Entpackort. **Geteilt:** Anleitungen → `docs/41`, CI → `docs/40`.
 - **Runde 2 — übernommen:** Review-Runden mit Datum und Verdict eingetragen;
   Kriterium 4 schließt den entpackten Ordner und `run.log` aus und setzt
   `HOME="$SANDBOX/home"`; Release aus Ziel und Stufe 4 entfernt (zeigt auf

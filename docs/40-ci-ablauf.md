@@ -77,12 +77,21 @@ PING 2026-11-17T15:15:48.205Z                     (die Seite selbst, 4 s später
 2. **Token erzeugen** (32 Bytes Zufall, 64 Hex) in eine Datei; `BC_TOKEN_FILE`
    darauf zeigen. `E2E_TOKEN_FILE` benennt sie.
 3. **Test-Kopie der Erweiterung bauen** (Verzeichnis, **kein Zip**): `extension/`
-   kopieren, dann zwei Zeilen patchen — der Endpunkt (`ws://127.0.0.1:18810`)
-   und das Token als Rückfallwert. Beide Patches werden **gezählt**
-   (`grep -c` ⇒ genau 1); findet ein Patch seine Zeile nicht, endet der Lauf mit
-   `seam moved` und Exit 1. Die ausgelieferte Erweiterung bleibt unverändert.
+   kopieren, dann **zwei Ersetzungen** in der Kopie, beide mit gezähltem Anker
+   (`grep -c` ⇒ genau 1, sonst `seam moved` und Exit 1):
+
+   | Anker (vorher) | nachher |
+   |---|---|
+   | `const DEFAULT_ENDPOINT = "ws://127.0.0.1:8110";` | `const DEFAULT_ENDPOINT = "ws://127.0.0.1:18810";` |
+   | `      token: asText(stored[TOKEN_KEY]),` | `      token: asText(stored[TOKEN_KEY]) \|\| "<token>",` |
+
+   Die zweite Zeile steht in `readSettings`; sie ist eine Ersetzung, keine
+   Einfügung — deshalb funktioniert `grep -c` für beide. Die ausgelieferte
+   Erweiterung bleibt unverändert.
 4. **Bridge starten:** `BC_BIND=127.0.0.1:18810 BC_HTTP_PORT=18811
-   <binary> --http`, Ausgabe in eine Logdatei.
+   <binary> --http`, Ausgabe in eine Logdatei, **stdin auf `ignore`** (unter
+   POSIX `< /dev/null`). Sonst beendet ein Pipe-EOF die Bridge mit 0
+   (`docs/38`, Stufe 2f) und der Test sucht einen Fehler, den es nicht gibt.
 5. **Beacon-Server starten** (Node, Port 18990): liefert `/page` mit einem
    eingebetteten `fetch("/ping")` und merkt sich den Treffer.
 6. **Firefox starten** mit der Test-Kopie: `npx web-ext@8.9.0 run --source-dir
@@ -131,10 +140,15 @@ Bereiche — 8110/8111 gehören dem laufenden Dienst, 18110–18119 den Test-Sui
 | Job | Läuft auf | Schritte |
 |---|---|---|
 | `test` | `ubuntu-latest`, Matrix 22/24 | **unverändert**: checkout, setup-node, `npm run check`, `npm test` — ohne Rust |
-| `unit` | `ubuntu-latest` | checkout, Node (für `parity.sh`), rustup (stable, Ziele `x86_64-unknown-linux-musl` + `x86_64-pc-windows-gnu`, Teil `clippy`), `gcc-mingw-w64-x86-64`; `npm run check`, `npm test`, `npm run test:bundle`, `npm run test:ci`; `cargo build --release` (beide Ziele), `cargo test -- --test-threads=1`, `clippy -D warnings --all-targets` (beide Ziele), `parity.sh --impl rust --check`, `parity.sh --self-test`; `upload-artifact` `bridge-linux` und `bridge-windows` |
+| `unit` | `ubuntu-latest` | checkout, Node (für `parity.sh`), rustup (stable, Ziele `x86_64-unknown-linux-musl` + `x86_64-pc-windows-gnu`, Teil `clippy`), `gcc-mingw-w64-x86-64`; `npm run check`, `npm test`, `npm run test:ci`; `cargo build --release` (beide Ziele), `cargo test -- --test-threads=1`, `clippy -D warnings --all-targets` (beide Ziele), `parity.sh --impl rust --check`, `parity.sh --self-test`; `upload-artifact` `bridge-linux` und `bridge-windows` |
 | `e2e` | `windows-latest`, braucht `unit` | checkout, Node, `download-artifact` `bridge-windows` **nach** `bridge-rs/target/x86_64-pc-windows-gnu/release/`, `node scripts/e2e/run.mjs` |
-| `bundle` | `ubuntu-latest`, braucht `unit` | checkout, Node, `download-artifact` `bridge-linux` nach `target/…/release/`, `scripts/bundle.sh`, `npm run test:bundle`, `upload-artifact` `portable-zips` (beide Zips) |
-| `release` | nur Tag `v*`, braucht `bundle` | `download-artifact` `portable-zips` mit `path: dist`, `merge-multiple: true`; `permissions: contents: write`; `GH_TOKEN: ${{ github.token }}`; `gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --clobber` |
+| `bundle` | `ubuntu-latest`, braucht `unit` | checkout, Node, `download-artifact` **beide** (`bridge-linux` → `bridge-rs/target/x86_64-unknown-linux-musl/release/`, `bridge-windows` → `bridge-rs/target/x86_64-pc-windows-gnu/release/`), `scripts/bundle.sh`, `npm run test:bundle`, `upload-artifact` `portable-zips` (beide Zips) |
+| `release` | **in `test.yml`**, nur Tag `v*`, braucht `bundle` | `download-artifact` `portable-zips` mit `path: dist`, `merge-multiple: true`; `permissions: contents: write`; `GH_TOKEN: ${{ github.token }}`; `gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --clobber` |
+
+**`release` steht in derselben Datei wie `bundle`.** `needs:` und
+`actions/download-artifact` gelten nur innerhalb einer Workflow-Datei; ein Job in
+einer zweiten Datei sieht die Artefakte des ersten nicht. Deshalb: eine Datei,
+fünf Jobs, `release` mit `if: startsWith(github.ref, 'refs/tags/v')`.
 
 **Vier Zeilen, die man sonst vergisst — und wo sie gepinnt sind:**
 
@@ -166,9 +180,20 @@ bash scripts/bundle.sh
 ```
 
 `node scripts/e2e/run.mjs` fährt den Blackbox-Ablauf. Umgebung:
-`E2E_FIREFOX`, `E2E_BINARY`, `E2E_TOKEN_FILE`; `--keep` lässt die Prozesse
-stehen, `--windows` setzt die Windows-Pfade, `--self-check --source <dir>` prüft
-nur die zwei Patch-Zeilen.
+
+| Variable | Bedeutung |
+|---|---|
+| `E2E_FIREFOX` | Pfad zu `firefox`; ohne sie sucht das Skript den Windows-Standardpfad |
+| `E2E_BINARY` | Pfad zum Bridge-Binary |
+| `E2E_TOKEN_FILE` | Pfad der Tokendatei (wird erzeugt, wenn sie fehlt) |
+| `E2E_BEACON_MODE` | `ok` (Vorgabe) oder `broken` — `broken` lässt `/ping` mit **500** antworten (Kriterium 2) |
+
+Flags: `--keep` lässt die Prozesse stehen, `--windows` setzt die
+Windows-Pfade, `--self-check --source <dir>` prüft nur die zwei Anker.
+
+**Alles, was das Skript anlegt, liegt unter `os.tmpdir()`** — Test-Kopie,
+Tokendatei und `--keep`-Reste gehören nicht in den Baum, sonst schlägt der
+Secret-Grep der Abnahme auf einem echten Token an.
 
 ## Testing
 
@@ -184,14 +209,16 @@ nur die zwei Patch-Zeilen.
 | `test/ci/e2e.test.js` | `e2e_seamPatch_shouldFindBothLines` | der Patch findet in einer Kopie Endpunkt **und** Token-Zeile; nach einer Umbenennung meldet er `seam moved` |
 
 Der E2E-Lauf selbst ist **kein** Unit-Fall: er startet Firefox und steht als
-Kriterium 1–3 bei den Betreiber-Kriterien.
+Kriterium 1–2 bei den Betreiber-Kriterien. Kriterium 3 (`--self-check`) startet
+keinen Browser und ist als `e2e_seamPatch_shouldFindBothLines` gepinnt.
 
 ## Acceptance criteria
 
 1. **Der E2E läuft und beweist die Seite.** *(Betreiber, echter Browser;
    Voraussetzung `E2E_FIREFOX`, `E2E_BINARY`.)* `node scripts/e2e/run.mjs` ⇒
-   Exit **0**, Ausgabe enthält `extension connected`, `open tab=` und die
-   Beacon-Zeile (`PING <ISO-8601>`). Ohne Beacon-Treffer Exit 1.
+   Exit **0**; im Bridge-Log steht `extension connected` **und** `open tab=`;
+   auf stdout steht die Beacon-Zeile `PING <ISO-8601>`. Ohne Beacon-Treffer
+   Exit 1.
 2. **Der Beacon ist unabhängig.** Ein Lauf mit einem Beacon, der `/ping` mit
    **500** beantwortet (`E2E_BEACON_MODE=broken`), ⇒ Exit 1 und **kein**
    `PING` — obwohl die Bridge `open tab=` meldet. Die Bridge kann den Test also
@@ -201,17 +228,20 @@ Kriterium 1–3 bei den Betreiber-Kriterien.
    's/DEFAULT_ENDPOINT/ENDPOINT/g' <kopie>/background.js` ⇒ Exit 1 mit
    `seam moved`. Die getrackte Datei bleibt unangetastet.
 4. **Unit und E2E sind getrennt.** `grep -c 'scripts/e2e/run.mjs'
-   .github/workflows/test.yml` ⇒ **1**, dieser Job läuft auf
-   `windows-latest`; der `unit`-Job nennt `runs-on: ubuntu-latest` und enthält
-   **kein** `firefox`.
+   .github/workflows/test.yml` ⇒ **1**; `grep -c 'runs-on: windows-latest'` ⇒
+   **1**; `awk '/^  unit:/,/^  [a-z]+:/' .github/workflows/test.yml | grep -c
+   'firefox'` ⇒ **0**.
 5. **Kein Stil-Lint in der CI.** `grep -rlE 'ste-lint|actionlint'
    .github/workflows/; echo $?` ⇒ **1** (keine Datei).
 6. **Der Unit-Job prüft den Code** — entschieden über die Testfälle, nicht über
-   `grep`-Zählung: `npm run test:ci` ⇒ `# fail 0`, und
-   `workflow_unitJob_shouldBuildBothTargetsInRelease` ist darin grün.
-7. **Der Release hängt die Zips an.** `grep -c 'gh release create'
-   .github/workflows/release.yml` ⇒ **1**; `grep -c 'contents: write'` ⇒ **1**;
-   `grep -c 'merge-multiple: true'` ⇒ **1**.
+   `grep`-Zählung: `npm run test:ci` ⇒ `# fail 0`, und darin sind
+   `workflow_unitJob_shouldBuildBothTargetsInRelease` und
+   `workflow_bundleJob_shouldUploadTheZips` grün.
+7. **Der Release hängt die Zips an** — in **derselben** Workflow-Datei wie
+   `bundle` (sonst sieht er die Artefakte nicht): `grep -c 'gh release create'
+   .github/workflows/test.yml` ⇒ **1**; `grep -c 'contents: write'` ⇒ **1**;
+   `grep -c 'merge-multiple: true'` ⇒ **1**; `test -f
+   .github/workflows/release.yml` ⇒ **nicht vorhanden** (Exit 1).
 8. **Der lokale Nachbau ist grün.** `bash scripts/ci-local.sh; echo $?` ⇒ Exit
    **0**, letzte Zeile `ci-local: alle Schritte grün`.
 9. **Beide Paritätsläufe stehen.** `bash scripts/parity.sh --impl rust --check`
@@ -231,25 +261,29 @@ benannten Fehler, räumt per PID auf (`taskkill /T` auf Windows).
 
 Beweis: Kriterien 1–3, auf Linux gemessen (der Ablauf oben ist der Messwert).
 
-**Stufe 2 — Job `unit` und `scripts/ci-local.sh`**
+**Stufe 2 — Job `unit`, `scripts/ci-local.sh`, `test:ci`**
 
 Dateien: `.github/workflows/test.yml` (Job `unit`), `scripts/ci-local.sh`,
-`CONTRIBUTING.md` (Abnahme um `npm run test:bundle`, `npm run test:ci`,
-`cargo test` ergänzt).
+`package.json` (`"test:ci": "node --test test/ci/*.test.js"`),
+`test/ci/workflow.test.js` (die Fälle zum `unit`-Job: `--release`,
+`--test-threads=1`, kein Stil-Lint), `CONTRIBUTING.md` (Abnahme um
+`npm run test:bundle`, `npm run test:ci`, `cargo test` ergänzt).
 
-Beweis: Kriterien 6, 8, 9.
+Beweis: Kriterien 5, 6, 8, 9.
 
 **Stufe 3 — Job `e2e`**
 
-Dateien: `.github/workflows/test.yml` (Job `e2e`), `test/ci/workflow.test.js`,
-`package.json` (`test:ci`).
+Dateien: `.github/workflows/test.yml` (Job `e2e`), `test/ci/workflow.test.js`
+(die E2E-Fälle: `runs-on: windows-latest`, `run: node scripts/e2e/run.mjs`,
+Artefakt-Download).
 
-Beweis: Kriterien 4, 5; `npm run test:ci` ⇒ `# fail 0`.
+Beweis: Kriterium 4; `npm run test:ci` ⇒ `# fail 0`.
 
 **Stufe 4 — `bundle` und `release`**
 
-Dateien: `.github/workflows/test.yml` (Job `bundle`),
-`.github/workflows/release.yml`.
+Dateien: `.github/workflows/test.yml` (Jobs `bundle` und `release`; **keine**
+zweite Workflow-Datei), `test/ci/workflow.test.js`
+(`workflow_bundleJob_shouldUploadTheZips`).
 
 Beweis: Kriterium 7; der erste Push zeigt den `e2e`-Lauf auf Windows.
 
@@ -296,6 +330,16 @@ Datei; Kriterium 2 prüfte den Token-Pfad statt der Beacon-Unabhängigkeit;
   `extension connected` nach 4 s, `open tab=2`, Beacon-Treffer 4 s später.
 - **2026-11-17, Abspaltung:** dieser Abschnitt war Teil von `docs/39`; der
   Spec-Review hat ihn dort als zweites Inkrement beanstandet (M8).
+- **Runde 2 — übernommen:** `bundle` lädt **beide** Binaries (nach
+  `bridge-rs/target/<ziel>/release/`); `release` ist ein Job in **derselben**
+  Datei (`needs` und `download-artifact` gelten nicht über Dateigrenzen); 
+  `npm run test:bundle` nur noch im `bundle`-Job; `test/ci` samt Workflow-Fällen
+  nach Stufe 2 gezogen (Stufe 2 hing an Stufe 3); die zwei Seam-Anker namentlich
+  benannt (beide sind Ersetzungen, keine Einfügung); Test-Kopie und `--keep`
+  unter `os.tmpdir()`; `E2E_BEACON_MODE` in der Umgebungsliste; Kriterium 1
+  trennt stdout und Bridge-Log; `stdin` auf `ignore`; Kriterium 4 mit drei
+  Kommandos; Kriterium 1–2 als Betreiber-Kriterien (3 ist gepinnt); das
+  `bundle`-Kriterium namentlich; `test:ci`-Rumpf hingeschrieben.
 - **Runde 1 — übernommen:** `## Additional dependencies` mit `web-ext 8.9.0`
   (MPL-2.0, nur E2E); eine Definition des `unit`-Jobs (Tabelle und Ziel gleich);
   Jobname `test` bleibt (keine Umbenennung, Branch-Protection ist Non-Goal);
