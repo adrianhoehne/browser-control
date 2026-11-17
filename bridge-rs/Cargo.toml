@@ -33,3 +33,8 @@ tokio = { version = "1", features = [
   "process",
   "macros",
 ] }
+# 2b: `Sec-WebSocket-Accept` is Base64 of SHA-1(key + GUID). Both crates are named
+# in `docs/38`, `## Dependency changes`; nothing else comes with the WebSocket
+# module, because the frame codec is ours.
+sha1 = "0.10"
+base64 = "0.22"

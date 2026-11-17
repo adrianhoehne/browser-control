@@ -127,7 +127,7 @@ Node-Suite nachgezogen.
 | `bridge-rs/tests/config.rs` | `loadConfig_withoutHttpPortEnv_shouldDefaultTo8111`, `loadConfig_withHttpPortEnv_shouldUseThatPort`, `loadConfig_withGarbageHttpPort_shouldFallBackToTheDefault`, dazu `parseBind` (`:0`, `[::1]`, leerer Host) und die Timeout-Fälle (`BC_HELLO_TIMEOUT_MS`, `BC_CALL_TIMEOUT_MS`) | Config, die stille Lüge `:0 ⇒ 8110`, JS-`Number()`-Arithmetik |
 | `bridge-rs/tests/platform.rs` | `findPortOwner_withOwnListeningSocket_shouldNameThisProcess`, `findPortOwner_withReleasedPort_shouldReturnNull` | die `/proc`-Auswertung (Linux-only) |
 | `bridge-rs/tests/ports.rs` | `everyNumber…Range`, `twoEntriesOnOneNumber`, `everyEntry…ExtensionPort` | die Porttabelle aus `tests/common/mod.rs` gegen sich selbst |
-| `bridge-rs/tests/ws.rs` | `ws_onAnAnnouncedOversizedFrame_shouldCloseWith1009BeforeThePayloadArrives` | die Grenze feuert vor dem Puffern |
+| `bridge-rs/tests/ws.rs` | 13 Fälle unter den Node-Namen (`acceptKey_withRfcSampleKey_*`, `encodeFrame_*`, `frameDecoder_*` (2), `upgradeSocket_*`, `websocket_*` (8)) + 30 `ws_`-Fälle, darunter `ws_onAnAnnouncedOversizedFrame_shouldCloseWith1009BeforeThePayloadArrives`, Ping zwischen zwei Fragmenten, Close-Frame mit einem Byte Payload, fehlende `Sec-WebSocket-Version`, ein Chunk mit vielen kleinen Frames | die Grenze feuert vor dem Puffern; Fragmentzustand überlebt Steuerframes; der Decoder bleibt linear |
 | `bridge-rs/tests/hub.rs` | 55 Fälle: die 14 reinen (`formatStatusLine_*`, `debugBlockOf_*`, `verifyToken_*`), 41 Sitzungsfälle (`hub_*`) und neu `hub_welcomeFrame_shouldCarryTheBridgeVersionAndTheProtocol` | Sitzung, Fristen, Statuszeilen, `welcome` |
 | `bridge-rs/tests/mcp.rs` | `mcp_toolsListIsByteIdentical`, `failureTextFor_transcriptNeedsFocus_shouldUseTheExtensionMessage`, die Naht-Fälle (Zahl in 2d) und die Prozessfälle aus 2f | Werkzeuge, deutsche Sätze, stdio |
 | `bridge-rs/tests/http.rs` | 14 portierte (`startHttpTransport_*` aus `test/http-transport.test.js`) + 2 neue (`http_withTheSameAnswerAsStdio_shouldMatch`, `http_rejectsAnOversizedChunkedBody`) = **16** | Auth, Grenzen, Statuscodes |
@@ -238,16 +238,26 @@ cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unkno
 
 **Stufe 2b — `ws`: Handshake, Codec, Close**
 
-Dateien: `src/ws/{mod,frame,handshake}.rs`, `tests/ws.rs`, `Cargo.toml`
-(`sha1`, `base64`).
+Dateien: `src/ws/{mod,frame,handshake}.rs`, `tests/ws.rs`, `src/lib.rs` (ein
+`pub mod ws;`, wie in 2a), `Cargo.toml` (`sha1`, `base64`), `Cargo.lock`.
 
 **Keine WebSocket-Bibliothek**: die Close-Codes `4401/4408/4409` und
 `1002/1003/1009` sind Vertrag, die Grenze muss **vor** dem Puffern feuern, und
 Bytes nach dem Handshake sind ein eigener Fall.
 
+**Der Puffer darf nicht pro Frame wandern.** `drain(..frame_end)` in der
+Decoderschleife verschiebt jedes Mal den Rest des Puffers — quadratisch in der
+Chunk-Größe, gemessen 66 s gegen 0,6 s der Vorlage bei 3 MB (Grenze: 5 MiB, und
+der Extension-Port prüft vor dem `hello` kein Token). Leseoffset, einmal pro
+`push` kompaktieren; ein Fall mit vielen kleinen Frames in einem Chunk hält es
+fest.
+
 Proof:
 ```
-cargo test --manifest-path bridge-rs/Cargo.toml --test ws 2>&1 | grep -cE '^test (acceptKey|encodeFrame|frameDecoder|upgradeSocket|websocket)_[A-Za-z0-9]+ \.\.\. ok'   # ⇒ 13
+cargo test --manifest-path bridge-rs/Cargo.toml --test ws 2>&1 | grep -cE '^test (acceptKey|encodeFrame|frameDecoder|upgradeSocket|websocket)_[A-Za-z0-9_]+ \.\.\. ok'   # ⇒ 13
+# Das `_` in der Zeichenklasse ist Pflicht: jeder Node-Name trägt einen weiteren
+# Unterstrich (`acceptKey_withRfcSampleKey_shouldReturn…`), mit `[A-Za-z0-9]+`
+# zählt der Beweis 0 und die Abnahme wäre rot.
 ```
 
 **Stufe 2c — `hub`**
@@ -508,6 +518,17 @@ Teil 2 geht erst weiter, wenn diese Runde abgearbeitet ist; gebaut wird nach
   Kommentar behauptet kein `Number(raw)` mehr; `protocol_constants!` erzeugt
   Konstanten und Vergleichstabelle aus einer Quelle; `bridge-rs/README.md`
   beschreibt den Stand nach 2a. **29 Rust-Fälle** (18 Unit + 11 Integration).
+- **Stufe 2b, Review-Runde (2026-11-17):** der Decoder wanderte pro Frame per
+  `drain` (quadratisch); mit Leseoffset und einer Kompaktierung pro `push`
+  **70 888 ms → 193 ms** bei 512 000 Frames / 3,58 MB in einem Chunk. Dazu:
+  Head-Bytes vor dem `Close` zugestellt (sonst verschluckt sie ein sofortiger
+  Socket-Abbau), `Headers::push` trimmt OWS wie Nodes Parser, der
+  Mixed-Case-Test prüft die Token-Schreibweise wirklich, und fünf Lücken sind
+  gepinnt (Ping zwischen Fragmenten, zwei Fragmentierungsrunden, exakte Grenze,
+  Ein-Byte-Close, fehlende Version). **72 Rust-Fälle.**
+- **Stufe 2b gebaut (2026-11-17) — Abhängigkeiten:** `sha1 0.10.7`,
+  `base64 0.22.1` (transitiv `digest`, `block-buffer`, `crypto-common`,
+  `generic-array`, `typenum`, `cpufeatures`, `cfg-if`, `version_check`).
 - **Stufe 2a gebaut (2026-11-17) — Abhängigkeit:** `tokio 1.54.1` (Lock-Angabe;
   `Cargo.toml` schreibt `"1"`), 16 Pakete, ausschließlich tokios transitiver
   Graph — kein `serde`, `sha2`, `base64` vorweg.
