@@ -152,7 +152,10 @@ Bereiche — 8110/8111 gehören dem laufenden Dienst, 18110–18119 den Test-Sui
 | `unit` | `ubuntu-latest` | checkout, Node (für `parity.sh`), rustup (stable, Ziele `x86_64-unknown-linux-musl` + `x86_64-pc-windows-gnu`, Teil `clippy`), `gcc-mingw-w64-x86-64`; `npm run check`, `npm test`, `npm run test:ci`; `cargo build --release` (beide Ziele), `cargo test -- --test-threads=1`, `clippy -D warnings --all-targets` (beide Ziele), `parity.sh --impl rust --check`, `parity.sh --self-test`; `upload-artifact` `bridge-linux` und `bridge-windows` |
 | `e2e` | `windows-latest`, braucht `unit` | checkout, Node, `download-artifact` `bridge-windows` **nach** `bridge-rs/target/x86_64-pc-windows-gnu/release/`, `env: E2E_BINARY: bridge-rs/target/x86_64-pc-windows-gnu/release/browser-control-bridge.exe`, `node scripts/e2e/run.mjs` |
 | `bundle` | `ubuntu-latest`, braucht `unit` | checkout, Node, `download-artifact` **beide** (`bridge-linux` → `bridge-rs/target/x86_64-unknown-linux-musl/release/`, `bridge-windows` → `bridge-rs/target/x86_64-pc-windows-gnu/release/`), `scripts/bundle.sh`, `npm run test:bundle`, `upload-artifact` `portable-zips` (beide Zips) |
-| `release` | **in `test.yml`**, nur Tag `v*`, braucht `bundle` | `download-artifact` `portable-zips` mit `path: dist`, `merge-multiple: true`; `permissions: contents: write`; `GH_TOKEN: ${{ github.token }}`; `gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --clobber` |
+| `release` | **in `test.yml`**, nur Tag `v*`, braucht `bundle` | `download-artifact` `portable-zips` mit `path: dist`, `merge-multiple: true`; `permissions: contents: write`; `GH_TOKEN: ${{ github.token }}`; `gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --verify-tag
+   || gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber` (`--clobber`
+   gehört zu `upload`; der erste Tag-Lauf am 2026-11-17 ist an genau diesem Flag
+   gescheitert) |
 
 **`release` steht in derselben Datei wie `bundle`.** `needs:` und
 `actions/download-artifact` gelten nur innerhalb einer Workflow-Datei; ein Job in
@@ -253,6 +256,7 @@ keinen Browser und ist als `e2e_seamPatch_shouldFindBothLines` gepinnt.
    `workflow_bundleJob_shouldUploadTheZips` grün.
 7. **Der Release hängt die Zips an** — in **derselben** Workflow-Datei wie
    `bundle` (sonst sieht er die Artefakte nicht): `grep -c 'gh release create'
+   .github/workflows/test.yml` ⇒ **1**; `grep -c 'gh release upload'
    .github/workflows/test.yml` ⇒ **1**; `grep -c 'contents: write'` ⇒ **1**;
    `grep -c 'merge-multiple: true'` ⇒ **1**; `test -f
    .github/workflows/release.yml` ⇒ **nicht vorhanden** (Exit 1).
