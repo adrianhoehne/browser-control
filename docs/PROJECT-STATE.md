@@ -10,6 +10,17 @@ Log oder einer Spec widerspricht, gilt der Beleg und diese Datei ist falsch.
 
 ## Stand (2026-11-17): der Schnitt ist vollzogen — die Bridge ist Rust
 
+**Umgeschaltet und im Betrieb gemessen (2026-11-17, 14:52):** Der Dienst läuft
+als `/home/adrian/.local/bin/browser-control-bridge --http` (systemd-User-Unit,
+PID 3429820), bindet 8110 und 8111, die Extension verbindet sich mit
+`protocol=1`, und die drei Werkzeugwege sind gegen den echten Firefox gelaufen:
+`browser_status` (1 Fenster, 5 Tabs), `browser_open_tab` ⇒ Tab 8,
+`browser_read` (300 Zeichen, `truncated=true via=innerText`),
+`browser_close_tab` ⇒ `closed: true`, danach wieder 5 Tabs und kein
+Agenten-Tab. Die Logzeilen stimmen mit der Node-Form überein
+(`open tab=8 url=…`, `read tab=8 … chars=300 truncated=true via=innerText`,
+`close tab=8`).
+
 **`docs/37` und `docs/38` sind `active`; die Node-Bridge ist mit diesem Inkrement
 gelöscht.** Ein Commit nimmt `bridge/` (acht Dateien), die zehn Node-Bridge-
 Testdateien und `test/ports.js` aus dem Baum; danach gilt
