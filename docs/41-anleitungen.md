@@ -113,7 +113,7 @@ fehlender Schritt auffällt:
 | Datei | Fall | Was er beweist |
 |---|---|---|
 | `test/bundle/bundle.test.js` | `guides_shouldBeNumberedFromOne` | beide Dateien beginnen mit `1.` und haben je Datei die in Kriterium 1 geforderte Mindestzahl numerierter Schritte |
-| `test/bundle/bundle.test.js` | `guides_shouldNameThePrintedLines` | die zwei **Werte** aus `deploy/portable/start.sh` (Endpunkt `ws://` und `/mcp`-URL) stehen wörtlich in den Anleitungen — nicht nur das Etikett `http: ` |
+| `test/bundle/bundle.test.js` | `guides_shouldNameThePrintedLines` | die zwei **Literale** `127.0.0.1:8110` und `127.0.0.1:8111` aus den Vorgaben von `deploy/portable/start.sh` stehen wörtlich in den Anleitungen — nicht nur das Etikett `http: ` |
 
 ## Acceptance criteria
 
@@ -187,7 +187,15 @@ Beweis: Kriterium 5; `npm run test:bundle` ⇒ `# fail 0`.
 
 ## Review
 
-### Runde 1 — steht aus
+### Runde 1 — 2026-11-17, `grizzled-senior-dev`: 🔧, Blocker dabei
+
+Vier Blocker: Kriterium 6 war unlösbar (`test/` in der Suchliste, obwohl der
+Workflow-Test das Wort als Muster tragen muss); die Warnung war als numerierter
+Schritt beschrieben, was alle Nummern verschoben hätte; der Fall
+`guides_shouldNameThePrintedLines` prüfte Etiketten statt Werte; der Fallname
+`guides_shouldStartAtStepOne` versprach weniger, als er prüft.
+
+### Runde 2 — steht aus
 
 ## Log
 
@@ -198,3 +206,7 @@ Beweis: Kriterium 5; `npm run test:bundle` ⇒ `# fail 0`.
   automatischen Lint.
 - **2026-11-17, Betreiberentscheid:** MCP-Hauptweg ist der HTTP-Endpunkt;
   Clients pi, Codex, OpenCode plus ein generisches Muster.
+- **Runde 1 — übernommen:** Kriterium 6 ohne `test/` (mit Begründung);
+  Warnung als Kasten zwischen Schritt 1 und 2, kein numerierter Schritt; der
+  Werkzeug-Fall prüft die zwei Literale statt der Etiketten; der Fall heißt
+  `guides_shouldBeNumberedFromOne`.

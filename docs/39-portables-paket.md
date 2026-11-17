@@ -146,6 +146,7 @@ schlimmer); fehlen `zip`/`unzip`, skippen die zwei Zip-Fälle wie in
    '^-rwxr-xr-x.*browser-control-bridge$'` ⇒ **1**, und für `start.sh` ⇒ **1**.
 3. **Kein Geheimnis im Zip.** `unzip -Z1 … | grep -cE '(^|/)data/'` ⇒ 0 und
    `unzip -p … start.sh | grep -acE '[0-9a-f]{32,}'` ⇒ 0.
+
 **Kriterien 4, 5 und 7 beobachten denselben Lauf.** Vor dem Start `mkdir -p
 "$SANDBOX/home"` und `touch "$SANDBOX/marker"`; gestartet wird in Kriterium 4,
 `kill $PID` steht am Ende von Kriterium 7. Kriterium 6 ist der zweite Start im
@@ -154,20 +155,22 @@ selben Ordner (mit `kill` davor). `run.log` liegt fest in `$SANDBOX/run.log`.
 4. **Es läuft ohne Installation.** In einem temporären Ordner entpackt, mit
    **freien Ports außerhalb der reservierten Bereiche** — 8110/8111 gehören dem
    Dienst, 18110–18119 den Test-Suiten (`bridge-rs/tests/common/mod.rs`):
-   `BC_BIND=127.0.0.1:18130 BC_HTTP_PORT=18131 ./start.sh > run.log 2>&1 &
-   PID=$!` (stdout und stderr zusammen, weil das Skript die drei Zeilen auf
+   `BC_BIND=127.0.0.1:18130 BC_HTTP_PORT=18131 ./start.sh >
+   "$SANDBOX/run.log" 2>&1 & PID=$!` (stdout und stderr zusammen, weil das Skript die drei Zeilen auf
    stdout druckt und die Bridge auf stderr loggt — es enthält das lebende Token
    und liegt deshalb **außerhalb des Baums**); auf die Zeile warten statt
    schlafen: `timeout 20 sh -c 'until grep -q "listening on 127.0.0.1:18130"
-   run.log; do sleep 0.2; done'; echo $?` ⇒ **0**; dann enthält `run.log`
+   "$SANDBOX/run.log"; do sleep 0.2; done'; echo $?` ⇒ **0**; dann enthält
+   `$SANDBOX/run.log`
    (Teilstring, mit Zeitstempel davor) `listening on 127.0.0.1:18130 log=info`
    **und** `listening on 127.0.0.1:18131 for POST /mcp`; `data/token` existiert
    mit 0600 und 64 Zeichen; **ohne** Token ⇒ `curl -s -o /dev/null -w
    '%{http_code}' -X POST http://127.0.0.1:18131/mcp` = `401`; **mit** Token ⇒
    `curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer
    $(cat <ordner>/data/token)" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-   http://127.0.0.1:18131/mcp` = `200`. **Beenden: `kill $PID`** — niemals
-   `pkill -f`, das trifft den Dienst (`CONTRIBUTING.md`).
+   http://127.0.0.1:18131/mcp` = `200`. **Nicht beenden** — der Lauf wird bis
+   Kriterium 7 gebraucht. Beendet wird per `kill $PID`, **nie** `pkill -f` (das
+   trifft den Dienst, `CONTRIBUTING.md`).
 5. **Nichts außerhalb des Ordners.** Nach `$SANDBOX` entpackt, startet der Lauf mit
    `HOME="$SANDBOX/home"`; der Ordner wird **vor** dem Marker angelegt. Nachher
    `find "$SANDBOX" -newer "$SANDBOX/marker" -not -path "$SANDBOX/browser-control-*"
@@ -183,9 +186,9 @@ selben Ordner (mit `kill` davor). `run.log` liegt fest in `$SANDBOX/run.log`.
    `stat -c %a <ordner>/data/token` ⇒ `600`. Danach `kill $PID` (Ende von
    Kriterium 7) — danach läuft kein Prozess aus diesem Test mehr.
 7. **Die drei gedruckten Zeilen stimmen mit den Ports.** `grep -c
-   '^endpoint: ws://127.0.0.1:18130$' run.log` ⇒ **1**, `grep -c
-   '^http: http://127.0.0.1:18131/mcp$' run.log` ⇒ **1**, `grep -cE '^token:
-   [0-9a-f]{64}$' run.log` ⇒ **1**. Ein Skript, das 8110 druckt und auf 18130
+   '^endpoint: ws://127.0.0.1:18130$' "$SANDBOX/run.log"` ⇒ **1**, `grep -c
+   '^http: http://127.0.0.1:18131/mcp$' "$SANDBOX/run.log"` ⇒ **1**, `grep -cE
+   '^token: [0-9a-f]{64}$' "$SANDBOX/run.log"` ⇒ **1**. Ein Skript, das 8110 druckt und auf 18130
    lauscht, fällt hier durch — das ist der teuerste Fehler, den das Paket machen
    könnte.
 8. **Die Anleitungen liegen im Zip.** `unzip -Z1 <zip> | grep -cE
@@ -230,9 +233,9 @@ Dateien nur ins Zip.
 
 **Reihenfolge über beide Specs:** `docs/41` Stufe 1–2 (die zwei Texte) →
 `docs/39` Stufe 1 (`bundle.sh` kopiert sie) → `docs/41` Stufe 3 (Struktur-Tests
-gegen das Zip) → `docs/39` Stufe 3 (Zip-Tests) → `docs/39` Stufe 4 (Doku).
+gegen das Zip) → `docs/39` Stufe 2 (Zip-Tests) → `docs/39` Stufe 3 (Doku).
 
-**Stufe 3 — Tests**
+**Stufe 2 — Tests**
 
 Dateien: `test/bundle/bundle.test.js` (die sieben Fälle aus `## Testing`),
 `package.json` (neues Skript `"test:bundle": "node --test test/bundle/*.test.js"`).
@@ -248,7 +251,7 @@ Beweis: `npm run test:bundle` ⇒ `# fail 0` (ohne `# skipped 0` — der hängt 
 Die **Startvorlagen und `README.txt`** liegen unter `deploy/portable/`, die
 **Anleitungen** unter `docs/portable/`; `bundle.sh` kopiert aus beiden Bäumen.
 
-**Stufe 4 — Doku**
+**Stufe 3 — Doku**
 
 Dateien: `README.md` (ein Absatz „Portable, no installation"), `INSTALL.md`
 (Verweis auf das Zip als kürzesten Weg), `docs/README.md` (Status-Zelle),
@@ -331,6 +334,12 @@ Prüfsumme verlangte eine Datei, die es auf CI nicht gibt; die Reihenfolge zu
   `unit`-Job; `--test-threads=1`; `permissions: contents: write` und
   `gh release create` (in `docs/40`). **Nicht** übernommen: eigene
   Release-Spec — der Anhang ist Teil des CI-Inkrements.
+- **Runde 1 (neuer Zuschnitt) — übernommen:** `$SANDBOX/home` wird vor dem
+  Marker angelegt und im `find` ausgeschlossen; ein beobachteter Lauf (Start in
+  Kriterium 4, `kill` am Ende von 7, Kriterium 6 = zweiter Start); `run.log`
+  liegt fest in `$SANDBOX/run.log`; Prüfsummen-Vergleich nur „falls vorhanden";
+  die Reihenfolge über beide Specs steht ausgeschrieben; die Rundenzählung ist
+  getrennt (alt 1–3, neu ab 1).
 - **Runde 3 — übernommen, dann geteilt:** `--binary <ziel>=<pfad>` (zweimal
   angebbar); `run.log` als feste Logdatei in den Kriterien 3, 5 und 6; der
   „mit Token"-Aufruf ausgeschrieben; Stufe-1-Beweis mit `unzip -Z1 | wc -l`;

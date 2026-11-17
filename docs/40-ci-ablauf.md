@@ -118,13 +118,12 @@ PING 2026-11-17T15:15:48.205Z                     (die Seite selbst, 4 s später
 10. **Aufräumen per PID** — Bridge, Beacon, `web-ext` **und** das von `web-ext`
     gestartete Firefox, auch im Fehlerfall.
 
-    **Firefox bekommt einen Wrapper**, weil `web-ext` seine PID nicht
-    herausgibt: `--firefox <wrapper>` mit einem Zwei-Zeiler, der seine PID in
-    eine Datei schreibt und dann `exec firefox "$@"` macht
-    (`echo $$ > <pidfile>; exec <firefox> "$@"`). Aufgeräumt wird diese PID.
-
-    Auf Windows `taskkill /T /PID <pid>` (der Baum!), auf POSIX `kill`; im
-    Node-Skript `process.kill(pid, "SIGTERM")` bzw. `taskkill`. **Niemals
+    **Auf Windows** genügt `taskkill /T /PID <web-ext-pid>`: `/T` nimmt den
+    ganzen Baum mit, also auch das von `web-ext` gestartete Firefox. **Auf
+    POSIX** gibt `web-ext` die Firefox-PID nicht heraus — dort bekommt Firefox
+    einen Wrapper: `--firefox <wrapper>` mit einem Zwei-Zeiler, der seine PID in
+    eine Datei schreibt und dann `exec` macht (`echo $$ > <pidfile>; exec
+    <firefox> "$@"`), und diese PID wird beendet. **Niemals
     `pkill -f`/`taskkill /IM`** — der Betreiber-Dienst hat dieselbe
     Kommandozeile, und genau das hat am 17.11. den Dienst zweimal beendet.
 
@@ -226,7 +225,8 @@ keinen Browser und ist als `e2e_seamPatch_shouldFindBothLines` gepinnt.
 ## Acceptance criteria
 
 1. **Der E2E läuft und beweist die Seite.** *(Betreiber, echter Browser;
-   Voraussetzung `E2E_FIREFOX`, `E2E_BINARY`.)* `node scripts/e2e/run.mjs` ⇒
+   `E2E_BINARY` nötig, `E2E_FIREFOX` optional — ohne sie nimmt das Skript den
+   Standardpfad, sonst bricht es mit `no firefox` ab.)* `node scripts/e2e/run.mjs` ⇒
    Exit **0**; im Bridge-Log steht `extension connected` **und** `open tab=`;
    auf stdout steht die Beacon-Zeile `PING <ISO-8601>`. Ohne Beacon-Treffer
    Exit 1.
@@ -241,7 +241,7 @@ keinen Browser und ist als `e2e_seamPatch_shouldFindBothLines` gepinnt.
    `test -z "$(git status --porcelain extension/)"` ⇒ Exit **0**.
 4. **Unit und E2E sind getrennt.** `grep -c 'scripts/e2e/run.mjs'
    .github/workflows/test.yml` ⇒ **1**; `grep -c 'runs-on: windows-latest'` ⇒
-   **1**; `awk '/^  unit:/,/^  [a-z]+:/' .github/workflows/test.yml | grep -c
+   **1**; `awk '/^  unit:/,/^  [a-z0-9]+:/' .github/workflows/test.yml | grep -c
    'firefox'` ⇒ **0**.
 5. **Kein Stil-Lint in der CI.** `grep -rlE 'ste-lint|actionlint'
    .github/workflows/; echo $?` ⇒ **1** (keine Datei).
