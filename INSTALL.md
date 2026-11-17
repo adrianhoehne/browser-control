@@ -12,6 +12,18 @@ you can skip the optional Caddy section entirely.
 Reference: `docs/01-skelett-verbindung-und-status.md` holds the configuration
 defaults and the acceptance criteria. This file says what to type.
 
+## The shortest path: the portable zip
+
+No compiler, no root, no service: unzip
+`browser-control-<version>-linux-x86_64.zip` (or the `…-windows-x86_64.zip`),
+run `start.sh` or `start.cmd`, and follow `FIREFOX.md` and `CLIENTS.md` in that
+folder. The token is created in `data/token` on the first start and kept from
+then on, and nothing is written outside the folder.
+
+Sections 2 to 4 below describe the **installed** setup: a service that survives a
+logout, a proxy in front of it, and the extension loaded from the repository. Use
+them when the zip is not enough.
+
 ## 1. Prerequisites
 
 | Where | What |

@@ -8,6 +8,32 @@ Log oder einer Spec widerspricht, gilt der Beleg und diese Datei ist falsch.
 
 **Eine Übergabe-Datei gibt es nicht mehr.** Bis 2026-11-12 lag hier `docs/HANDOVER.md` (Stand, Entscheidungen, Betrieb); für die Veröffentlichung ist sie entfallen, weil sie Betriebsdaten trug. Der Stand steht in dieser Datei, das Verfahren in `CONTRIBUTING.md`, die Einrichtung in `INSTALL.md`.
 
+## Stand (2026-11-17): das portable Paket ist gebaut
+
+**`docs/39` und `docs/41` sind `active`.** Ein Befehl baut zwei Zips
+(`bash scripts/bundle.sh`), jedes mit **sieben Einträgen**: der Ordner-Eintrag,
+das Binary, die XPI, das Startskript, `README.txt`, `FIREFOX.md`, `CLIENTS.md`.
+
+- **Die Zips:** `dist/browser-control-0.4.0-linux-x86_64.zip` (Binary aus
+  `bridge-rs/target/x86_64-unknown-linux-musl/release/`) und
+  `…-windows-x86_64.zip` (`.exe` und `start.cmd`, CRLF). Startskript und Binary
+  liegen mit `0755` im Archiv; die Version kommt aus `extension/manifest.json`,
+  also aus einer Quelle.
+- **Die Startskripte** (`deploy/portable/start.sh`, `start.cmd`) legen `data/` an
+  und beim ersten Lauf `data/token` (64 Hex, `0600`), überschreiben ein
+  vorhandenes Token nie, drucken genau drei Zeilen (`endpoint:`, `http:`,
+  `token:`) und werden per `exec` das Binary mit `--http`. Kein `nohup`, keine
+  PID-Datei; eine Wildcard-Adresse wird als `127.0.0.1` gedruckt.
+- **Die Anleitungen** liegen in `docs/portable/` und gehen von dort ins Zip —
+  eine Quelle, keine zweite Fassung. Englisch nach STE100, ohne Lint.
+- **Tests:** `npm run test:bundle` sind **9 Fälle**
+  (`test/bundle/bundle.test.js`), grün; `npm test` bleibt binary-frei und
+  unverändert bei **492 Fällen**.
+
+**Was nicht gemessen ist:** `start.cmd` und der `.exe`-Weg sind gebaut, nicht
+gelaufen — Betreiber-Messung auf einem Windows-Rechner. Die Erweiterung bleibt
+temporär: nach einem Firefox-Neustart ist sie weg, und die Anleitung sagt das.
+
 ## Stand (2026-11-17): der Schnitt ist vollzogen — die Bridge ist Rust
 
 **Umgeschaltet und im Betrieb gemessen (2026-11-17, 14:52):** Der Dienst läuft

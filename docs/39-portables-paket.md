@@ -1,6 +1,6 @@
 ---
 description: Ein portables Zip — Startskripte, die das Token im Ordner anlegen, das Server-Binary, die XPI und zwei Anleitungen; entpacken, starten, fertig, ohne Installation, ohne Root, ohne Dienst.
-status: proposed
+status: active
 ---
 
 # Das portable Paket
@@ -178,7 +178,9 @@ dann `mkdir -p "$SANDBOX/home"` und `touch "$SANDBOX/marker"`, dann `sleep 1`
 5. **Nichts außerhalb des Ordners.** Nach `$SANDBOX` entpackt, startet der Lauf mit
    `HOME="$SANDBOX/home"`; der Ordner wird **vor** dem Marker angelegt. Nachher
    `find "$SANDBOX" -newer "$SANDBOX/marker" -not -path "$SANDBOX/browser-control-*"
-   -not -name 'run.log' -not -path "$SANDBOX/home*" -print` ⇒ **leer** — was das
+   -not -name 'run.log' -not -path "$SANDBOX/home*" -mindepth 1 -print` ⇒
+   **leer** (ohne `-mindepth 1` meldet `find` die Sandbox selbst, deren mtime
+   `run.log` verändert) — was das
    Skript in seinem eigenen Ordner und in `HOME` anlegt, ist erlaubt. Zusätzlich
    ist die Prüfsumme der echten `~/.config/browser-control/token` vor und nach
    dem Lauf gleich (`sha256sum` beidseitig) — **falls die Datei existiert**;

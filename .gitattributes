@@ -1,0 +1,2 @@
+# `cmd.exe` braucht CRLF; ein normalisierender Checkout würde start.cmd sonst auf LF ziehen.
+deploy/portable/start.cmd text eol=crlf

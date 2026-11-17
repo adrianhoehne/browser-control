@@ -44,6 +44,14 @@ persistence across a background tab, and a log that does not copy page text.
 
 ## Quick start
 
+**Portable, no installation.** Download the zip of your platform
+(`browser-control-<version>-linux-x86_64.zip` or
+`browser-control-<version>-windows-x86_64.zip`), unzip it anywhere, and run
+`start.sh` (Linux) or `start.cmd` (Windows). That window shows the endpoint, the
+MCP address and the token, and the folder holds the two guides `FIREFOX.md` and
+`CLIENTS.md`. Nothing is installed, nothing is written outside that folder, and
+the token is created in `data/token` on the first start.
+
 The full guide is **[INSTALL.md](INSTALL.md)**: token file, bridge as a systemd
 user service, loading the extension. A reverse proxy is optional and covered at
 the end.
@@ -76,6 +84,8 @@ There are **no dependencies** — Node ≥ 22 is enough:
 npm test        # 757 cases, TAP output, ~95 s
 npm run check   # node --check over every .js/.mjs
 ./scripts/package.sh   # builds dist/browser-control-<version>.xpi (unsigned)
+./scripts/bundle.sh    # builds both portable zips into dist/ (needs built binaries)
+npm run test:bundle    # the zip cases; not part of `npm test` (it needs a built binary)
 ```
 
 How changes happen (spec → gate → dev plan → review → acceptance) is described

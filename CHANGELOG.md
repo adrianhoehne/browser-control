@@ -3,6 +3,26 @@
 Alle nennenswerten Änderungen. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unreleased]
+
+**Das portable Zip.** `bash scripts/bundle.sh` baut je Plattform ein Zip —
+Binary, XPI, Startskript und zwei Anleitungen —, das ohne Installation läuft.
+
+- **Inhalt (sieben Einträge):** Ordner-Eintrag, `browser-control-bridge`, die
+  XPI, `start.sh`, `README.txt`, `FIREFOX.md`, `CLIENTS.md`; Windows mit `.exe`
+  und `start.cmd` (CRLF, kein WSL). Startskript und Binary liegen mit `0755` im
+  Archiv.
+- **`start.sh` / `start.cmd`** legen `data/token` beim ersten Lauf an
+  (`openssl rand -hex 32`, Rückfall `/dev/urandom`; Windows
+  `RandomNumberGenerator`), überschreiben es nie, drucken genau drei Zeilen und
+  werden das Binary mit `--http`. Nichts wird außerhalb des Ordners geschrieben.
+- **`docs/portable/FIREFOX.md` und `CLIENTS.md`** — Englisch nach STE100: die
+  XPI in `about:debugging` laden, Endpunkt und Token eintragen; pi, Codex,
+  OpenCode plus ein generisches JSON- und TOML-Muster.
+- **Neu:** `scripts/bundle.sh`, `npm run test:bundle` (9 Fälle in
+  `test/bundle/bundle.test.js`); `npm test` bleibt binary-frei.
+- `docs/39` und `docs/41` sind `active`.
+
 ## [0.4.0] — 2026-11-15
 
 **Die Einstellungsseite der Erweiterung ist englisch.** Das Projekt ist

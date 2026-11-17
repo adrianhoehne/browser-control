@@ -1,6 +1,6 @@
 ---
 description: Zwei Anleitungen für das portable Paket — Firefox mit der XPI und die MCP-Clients pi, Codex, OpenCode; Englisch nach ASD-STE100, als Schreibregel ohne Prüfskript.
-status: proposed
+status: active
 ---
 
 # Die zwei Anleitungen
