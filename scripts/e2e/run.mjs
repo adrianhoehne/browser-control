@@ -446,6 +446,9 @@ async function main() {
   // Named outside the try block: a failure has to be able to quote the bridge log
   // before the work directory goes away with it.
   let bridgeLog = null;
+  // web-ext installs the temporary add-on and starts Firefox; its output is the
+  // only place that says *why* Firefox refused. It has to survive the failure too.
+  let webExtLog = null;
   try {
     // Step 1 and 2: binary and token, before anything listens.
     const binary = resolveBinary({ windows });
@@ -459,7 +462,7 @@ async function main() {
 
     bridgeLog = path.join(workDir, "bridge.log");
     const beaconLog = path.join(workDir, "beacon.log");
-    const webExtLog = path.join(workDir, "web-ext.log");
+    webExtLog = path.join(workDir, "web-ext.log");
     const firefoxPidFile = path.join(workDir, "firefox.pid");
 
     // Step 4: the bridge on the ports that belong to this run.
@@ -524,6 +527,9 @@ async function main() {
     // no beacon arrived. Printing it here makes a red run readable.
     if (bridgeLog) {
       process.stderr.write(`--- bridge.log (last lines) ---\n${tail(readIfExists(bridgeLog))}\n`);
+    }
+    if (webExtLog) {
+      process.stderr.write(`--- web-ext.log (last lines) ---\n${tail(readIfExists(webExtLog))}\n`);
     }
     throw error;
   } finally {
