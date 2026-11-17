@@ -37,6 +37,7 @@ dependencies = [
  "sha2",
  "subtle",
  "tokio",
+ "windows-sys",
 ]
 
 [[package]]

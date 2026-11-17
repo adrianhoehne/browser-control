@@ -200,14 +200,47 @@ pub fn stdin_is_client_channel() -> bool {
     }
 }
 
-/// Windows has no `/proc`, so the answer here is `false` — which is also what the template
-/// answers on Windows: a non-Unix Node reports neither `isFIFO()` nor `isSocket()` for
-/// descriptor 0, so the rule never fires in either implementation. This is not a parity gap.
-/// What `docs/38`, stage 3, adds is the capability the template never had: `GetFileType`
-/// tells a pipe from a character device, so a Windows service could shut down on a client's
-/// EOF without restarting in a loop on a null device. Until then: no shutdown on EOF, which
-/// is the safe half — a service that runs too long beats one that restarts forever.
-#[cfg(not(unix))]
+/// Windows answers the same question with `GetFileType`, and the answer is the same rule:
+/// a pipe counts, a character device does not.
+///
+/// Windows has no `fstat`-style `S_IFIFO`, so `GetFileType` is the whole check. It returns
+/// `FILE_TYPE_PIPE` for anonymous pipes *and* for socketpair-shaped handles — both are what
+/// a client that speaks stdio hands over — `FILE_TYPE_CHAR` for a console *and* for the
+/// `NUL` device (which is the `/dev/null` equivalent and, like systemd's `/dev/null`, must
+/// not end the process), and `FILE_TYPE_DISK` for a redirected file, which has no client
+/// behind it that could say goodbye.
+///
+/// **This is deliberately better than the template, and the deviation is named.**
+/// `bridge/bridge.mjs` asks `fstatSync(0).isFIFO() || isSocket()`, and Node answers `false`
+/// for both on Windows even when descriptor 0 *is* a pipe — a Node bridge started on
+/// Windows therefore never ends on stdin-EOF, and `docs/38` calls the two implementations
+/// "deckungsgleich" for exactly that reason (both said `false`). Here the answer is the
+/// truthful one instead: a Windows client that closes stdin ends the bridge, a `NUL` stdin
+/// does not. The parity comparison cannot see the difference — it only ever runs on Linux
+/// — which is why it is written down here and in `## Open` of the stage-3 report.
+#[cfg(windows)]
+pub fn stdin_is_client_channel() -> bool {
+    use std::os::windows::io::AsRawHandle;
+
+    use windows_sys::Win32::Storage::FileSystem::{GetFileType, FILE_TYPE_PIPE};
+
+    // `AsRawHandle` on `Stdin` and not `GetStdHandle(STD_INPUT_HANDLE)`: both name the same
+    // inherited handle, and `GetStdHandle` would need `Win32_System_Console` — a feature
+    // `docs/38`, `## Dependency changes` does not list, because std already hands the handle
+    // over. The value is valid for as long as the `Stdin` value lives.
+    let handle = std::io::stdin().as_raw_handle();
+    // SAFETY: `GetFileType` reads a handle value and returns its type; it takes no ownership,
+    // writes nothing and cannot fail the process. `FILE_TYPE_UNKNOWN` (0) on a bad handle is
+    // simply not `FILE_TYPE_PIPE`, which is the safe half: no shutdown on EOF.
+    let file_type = unsafe { GetFileType(handle) };
+
+    file_type == FILE_TYPE_PIPE
+}
+
+/// Neither Linux nor Windows: no cheap way to ask what descriptor 0 is, so the answer is
+/// `false` — a service that runs too long beats one that restarts forever. A platform that
+/// wants the real answer adds its own arm above.
+#[cfg(not(any(unix, windows)))]
 pub fn stdin_is_client_channel() -> bool {
     false
 }

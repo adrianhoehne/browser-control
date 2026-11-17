@@ -64,3 +64,19 @@ hyper = { version = "1", features = ["server", "http1"] }
 # already switched on by the line above.
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
+
+# 3: Windows has no `/proc`, so the two questions Linux answers by reading it need the
+# operating system's own API — who holds the port (`GetExtendedTcpTable`) and what
+# descriptor 0 is (`GetFileType`), plus the process name behind that PID
+# (`OpenProcess`/`QueryFullProcessImageNameW`). `docs/38`, `## Dependency changes` names
+# exactly these four features; `Win32_System_Console` is deliberately absent, because
+# `GetStdHandle` is not needed — `std::io::Stdin::as_raw_handle` already hands over the
+# inherited handle. The crate is a `cfg(windows)` dependency, so the Linux build does not
+# see it at all; it is already in `Cargo.lock` as one of tokio's transitive crates.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Threading",
+  "Win32_Foundation",
+] }

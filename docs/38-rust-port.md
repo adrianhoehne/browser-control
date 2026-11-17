@@ -492,6 +492,11 @@ Stand 2026-11-16:
 - **Die Zahl der Naht-Fälle** (ausgezählt in 2d): 148 portierbare Node-Fälle
   (151 Blattfälle minus 3 stdin-Fälle aus 2f), davon 114 in `tests/mcp.rs` —
   die Differenz sind ~37 Fälle, die in `for`-Schleifen zusammengefasst sind.
+- **Windows ist kompiliert, nicht gelaufen** — die Proben für den Betreiber
+  stehen in `bridge-rs/README.md` (Portbesitzer gegen `Get-NetTCPConnection`,
+  `name=unknown` bei fremden Prozessen, `GetFileType` mit `< NUL` und Pipe,
+  Strg+C ⇒ `received SIGINT`), dazu `row_capacity` in `platform/windows.rs`:
+  reine Arithmetik über `size_of`, aber noch hinter `cfg(windows)`.
 - **Vier Abweichungen aus 2d:** `is_http_url` akzeptiert `http://user@:80`, wo
   `new URL()` lokal verweigert (sichtbar nur ohne verbundene Extension:
   `ExtensionUnavailable` statt der Verweigerung); stdio trennt nur an `\n`,
@@ -578,6 +583,20 @@ Teil 2 geht erst weiter, wenn diese Runde abgearbeitet ist; gebaut wird nach
   nicht grün bekommt, und beide Proof-Zeilen zählten mit `[A-Za-z0-9]` statt
   `[A-Za-z0-9_]` (jeder Node-Name trägt weitere Unterstriche). Die
   Runde-1-Zeile bleibt als Protokoll stehen, wie sie war.
+- **Stufe 3 gebaut (2026-11-17):** Windows-Seite. `platform/windows.rs` holt den
+  Portbesitzer über `GetExtendedTcpTable` (`TCP_TABLE_OWNER_PID_ALL`, IPv4 **und**
+  IPv6, `LISTEN`/`ESTAB`) und `QueryFullProcessImageNameW`; `stdio.rs` erkennt
+  den Client-Kanal über `GetFileType` (`FILE_TYPE_PIPE`), `main.rs` beendet über
+  `ctrl_c` mit `received SIGINT, shutting down` (die Schreibweise der Vorlage);
+  `deploy/windows/browser-control-bridge.xml` startet die Bridge als
+  Task-Scheduler-Aufgabe (`AtLogOn`, `InteractiveToken`, `LeastPrivilege`).
+  Die **reine** Dekodierung (`port_of`, `holds_port`, `image_basename`,
+  Zustandszahlen) liegt in `platform/windows_table.rs` **ohne `cfg`** und wird
+  auf Linux getestet — der erste Anlauf hatte sie hinter `cfg(windows)`, wo sie
+  nur `clippy` sah, und der Test baute das Feld mit falscher Byte-Ordnung
+  (`port_of` lieferte 44575 statt 8110). **283 Rust-Fälle**, parity 7/7.
+  **Bewusste Abweichung:** `GetFileType` beendet die Bridge bei einer Pipe auf
+  Windows, wo die Vorlage weiterläuft.
 - **Stufe 2f gebaut (2026-11-17):** Prozesstests und stdin-Lebenszyklus.
   `tests/bridge.rs` startet das echte Binary für die drei Verträge — Pipe-EOF ⇒
   Exit 0 mit genau einer Zeile `stdin closed, shutting down`, dasselbe mit

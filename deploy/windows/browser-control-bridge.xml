@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Task Scheduler definition for the operator's own Windows account.
+
+  Warum eine Aufgabe und kein Dienst: die Bridge spricht mit dem Firefox des
+  Betreibers, und Firefox und pi laufen in dessen Sitzung. Ein Windows-Dienst
+  laeuft in Sitzung 0 und saehe weder den Browser noch den Desktop. Deshalb
+  "AtLogOn" mit "InteractiveToken" und "LeastPrivilege" - keine Admin-Rechte,
+  keine Erhoehung, kein Passwort im Auftrag.
+
+  Warum %LOCALAPPDATA%: der Ort gehoert dem angemeldeten Benutzer, braucht keine
+  Erhoehung, und die Task Scheduler loest die Variable beim Start in genau dieser
+  Sitzung auf. Nach %ProgramFiles% kaeme das Binary nur mit Adminrechten.
+
+  Kein RestartOnFailure und kein Wiederholungsintervall: Exit 2 heisst
+  "Tokendatei fehlt oder ist zu kurz" (siehe deploy/browser-control.service und
+  den Abschnitt "Windows" in bridge-rs/README.md). Das heilt kein Neustart - auf
+  Linux steht dafuer RestartPreventExitStatus=2 in der Unit, hier ist "kein
+  Neustart" das Verhalten, das denselben Fehler nicht in Rauschen begraebt.
+
+  ExecutionTimeLimit PT0S = unbegrenzt: die Bridge ist ein Dienst, kein Auftrag.
+
+  AllowHardTerminate bleibt true, damit "Beenden" im Task Scheduler wirklich
+  beendet. Der geordnete Weg bleibt Strg+C in der Konsole; ueber die Aufgabe
+  beendet Windows den Prozess hart, und das ist besser als eine Aufgabe, die sich
+  nicht stoppen laesst.
+
+  Die Datei ist bewusst reines ASCII. schtasks liest die XML ohne Ruecksicht auf
+  eine BOM; Umlaute in Kommentaren waeren der einzige Grund, sich auf eine
+  Kodierung zu verlassen. Wer sie trotzdem braucht, speichert als UTF-16 LE mit
+  BOM (das Format, das Task Scheduler selbst exportiert).
+-->
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>browser-control</Author>
+    <Description>Browser bridge that exposes the operator's own Firefox as an MCP server (extension port 8110, POST /mcp on 8111).</Description>
+    <URI>\browser-control-bridge</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>%LOCALAPPDATA%\browser-control\browser-control-bridge.exe</Command>
+      <Arguments>--http</Arguments>
+      <WorkingDirectory>%LOCALAPPDATA%\browser-control</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

@@ -77,14 +77,15 @@ What it does today, in the order it happens:
 8. Stops on SIGTERM/SIGINT, and on a stdin that belongs to a client. Under systemd
    stdin is `/dev/null`, and its EOF is not a shutdown request: a pipe or a
    socketpair is, `/dev/null` and a terminal are not (`std::fs::metadata` on
-   `/proc/self/fd/0`). Without that distinction `Restart=on-failure` would turn the
-   service into a restart loop.
+   `/proc/self/fd/0`; on Windows `GetFileType`, see [Windows](#windows)). Without that
+   distinction `Restart=on-failure` would turn the service into a restart loop.
 
-Stages 2a–2f of `docs/38` are built, so all seven comparisons of `scripts/parity.sh`
-are green and the binary is the parity-checked port of `../bridge/`, not a work in
-progress. What is still open is named in `docs/38`: the Windows stage (3), the
-switch-over (`4a`/`4b`) and the operator's live measurement of the extension
-connection.
+Stages 2a–2f and 3 of `docs/38` are built, so all seven comparisons of
+`scripts/parity.sh` are green and the binary is the parity-checked port of
+`../bridge/`, not a work in progress. What is still open is named in `docs/38`: the
+switch-over (`4a`/`4b`), the operator's live measurement of the extension connection
+and the Windows measurement of everything the cross-build can only compile (see
+[Windows](#windows)).
 
 stdout is the JSON-RPC channel and nothing else: one JSON line per answer, no BOM,
 no blank line, no log line. Everything diagnostic goes to stderr, timestamped with
@@ -113,7 +114,7 @@ sudo apt install gcc-mingw-w64-x86-64   # provides x86_64-w64-mingw32-gcc
 
 ## Dependencies
 
-Ten crates, all named in `docs/38`, `## Dependency changes`:
+Eleven crates, all named in `docs/38`, `## Dependency changes`:
 
 | Crate | Why |
 |---|---|
@@ -123,6 +124,7 @@ Ten crates, all named in `docs/38`, `## Dependency changes`:
 | `serde_json` (`preserve_order`) | the hub's JSON protocol and the tool layer's answers; `preserve_order` pulls `indexmap` in, because the unlisted fields of a debug block keep result order and the tool table keeps the order of `bridge/mcp.mjs` |
 | `serde` (`derive`) | the JSON-RPC error object serialises itself, so its wire names cannot drift from its fields |
 | `hyper` (`server`, `http1`) + `hyper-util` (`tokio`) + `http-body-util` | `POST /mcp`: chunked request bodies, `Content-Length`, keep-alive and `Connection: close` are HTTP/1.1 details nobody should re-derive by hand; `hyper-util`'s `tokio` feature is what supplies `TokioTimer` and with it the header deadline |
+| `windows-sys` (`Win32_NetworkManagement_IpHelper`, `Win32_Storage_FileSystem`, `Win32_System_Threading`, `Win32_Foundation`) | **`cfg(windows)` only**: `GetExtendedTcpTable` for the port owner, `GetFileType` for stdin, `OpenProcess`/`QueryFullProcessImageNameW` for the process name. `Win32_System_Console` is deliberately absent — `std::io::Stdin::as_raw_handle` hands the handle over, so `GetStdHandle` is not needed |
 
 No WebSocket crate: the frame codec, the head reader of the extension port and the
 two refusal answers there are ours, because the close codes, the message limit and
@@ -146,7 +148,9 @@ The artefacts land in `target/<target>/release/`:
 - `bridge-rs/target/x86_64-pc-windows-gnu/release/browser-control-bridge.exe`
 
 `scripts/install.sh` copies the Linux binary from exactly the first path to
-`$HOME/.local/bin`, so the artefact name is load-bearing.
+`$HOME/.local/bin`, so the artefact name is load-bearing. On Windows the second
+path is the file `deploy/windows/browser-control-bridge.xml` points at — copied to
+`%LOCALAPPDATA%\browser-control\`, see [Windows](#windows).
 
 ## Why `--target` is in every command
 
@@ -215,6 +219,106 @@ would find the first run's port taken. `tests/ports.rs` keeps that table honest.
 bridge; it does not build anything, so build the musl release first. With `--http`
 the binary answers on two ports; comparison 7 records the second line,
 `listening on <host>:<BC_HTTP_PORT> for POST /mcp`, right after the first one.
+
+## Windows
+
+Linux answers two questions by reading `/proc`: who holds a port, and what stdin is. Windows
+has no `/proc`, so stage 3 of `docs/38` asks the operating system instead, and adds a start
+path that survives a logoff.
+
+| Piece | Windows |
+|---|---|
+| port owner | `GetExtendedTcpTable` (`TCP_TABLE_OWNER_PID_ALL`, IPv4 **and** IPv6) for the PID of a row in state `LISTEN`/`ESTABLISHED`, then `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` + `QueryFullProcessImageNameW` for the name |
+| stdin | `GetFileType(stdin)` — `FILE_TYPE_PIPE` is a client channel, `FILE_TYPE_CHAR` (console, `NUL`) is not, `FILE_TYPE_DISK` (a redirected file) is not either |
+| stop | `tokio::signal::ctrl_c()` ⇒ `received SIGINT, shutting down`, exit `0` |
+| start | `deploy/windows/browser-control-bridge.xml`, a Task Scheduler task, see below |
+
+The owner line is the Linux line, character for character: `port 127.0.0.1:8110 in use,
+owner pid=1234 name=browser-control-bridge.exe` — or `… in use, Besitzer nicht ermittelbar`
+when any step of the lookup is in doubt. Every doubt answers `None`: a table that cannot be
+read, a second `ERROR_INSUFFICIENT_BUFFER` after three tries, a process whose image cannot be
+opened. A guessed PID would send the operator hunting the wrong process. The `name` is the
+image's file name and not its full path, because the Linux side reads `/proc/<pid>/comm`,
+which is a bare name too; both `\` and `/` count as separators.
+
+Two places where this differs from `../bridge/` — the first because the template had no
+Windows answer at all, the second on purpose:
+
+- `bridge/port-owner.mjs` reads `/proc` and returned `null` on Windows, so every failed bind
+  there said "Besitzer nicht ermittelbar". This binary names the PID — a capability the
+  template never had, which is why `docs/30`, `## Non-goals` listed it as missing.
+- `bridge/bridge.mjs` asks `fstatSync(0).isFIFO() || isSocket()`, and Node answers `false` for
+  both on Windows even when descriptor 0 **is** a pipe. The Node bridge therefore never ends
+  on a stdin EOF on Windows, and `docs/38` calls the two implementations "deckungsgleich" for
+  exactly that reason — both said `false`. `GetFileType` answers truthfully instead: a
+  Windows client that closes stdin ends the bridge, a `NUL` stdin does not. **This is a
+  deliberate deviation from the template**, in the safe direction (a service that ends when
+  its client leaves, and one that keeps running on a null device). `scripts/parity.sh`
+  cannot see the difference, because it only ever runs on Linux.
+
+Ctrl+Break is **not** wired up: `bridge/bridge.mjs` handles `SIGTERM` and `SIGINT` and
+nothing else, and a second exit path that nothing measures is a second exit path that can
+rot. The line for the one signal Windows produces is `received SIGINT`, not
+`received SIGTERM` — claiming a signal the platform does not have would be a lie in the
+journal.
+
+### Installing the start path
+
+A scheduled task and not a service: the bridge speaks to the operator's Firefox, and
+Firefox and pi run in the operator's session. A Windows service runs in session 0 and would
+see neither the browser nor the desktop. So: `AtLogOn`, `InteractiveToken`,
+`LeastPrivilege` — no Administrator prompt, no password, no elevation.
+
+The binary lives in `%LOCALAPPDATA%\browser-control\` — that directory belongs to the
+account, needs no elevation, and Task Scheduler expands the variable in the session it
+starts the task in. `%ProgramFiles%` would need Administrator rights to write.
+
+In `cmd.exe`, as the account that will run the bridge, from the repository root:
+
+```bat
+mkdir "%LOCALAPPDATA%\browser-control"
+copy bridge-rs\target\x86_64-pc-windows-gnu\release\browser-control-bridge.exe "%LOCALAPPDATA%\browser-control\"
+schtasks /Create /TN browser-control-bridge /XML deploy\windows\browser-control-bridge.xml
+schtasks /Run /TN browser-control-bridge
+```
+
+Undo — the bridge and the task, in that order:
+
+```bat
+schtasks /End /TN browser-control-bridge
+schtasks /Delete /TN browser-control-bridge /F
+```
+
+What the task deliberately does **not** do:
+
+- **No restart on failure.** Exit `2` is "token file missing or too short", and no restart
+  heals that; the Linux unit pins the same decision with `RestartPreventExitStatus=2`.
+- **No second instance.** `MultipleInstancesPolicy=IgnoreNew`: a second logon with the task
+  still running does nothing, instead of a second bridge that would fail on the port and
+  leave two processes behind.
+- **No environment.** The token file is the default
+  `%USERPROFILE%\.config\browser-control\token`, so `BC_TOKEN_FILE` is not needed. `BC_LOG`,
+  `BC_BIND` and `BC_HTTP_PORT` follow their defaults (`info`, `127.0.0.1:8110`, `8111`).
+
+Success looks like this: `schtasks /Query /TN browser-control-bridge /V /FO LIST` says
+`Running`, and `Get-Process browser-control-bridge` names the PID. `schtasks /Query /XML`
+shows `%LOCALAPPDATA%` unexpanded — that is the stored form, not a broken path.
+
+One property of that start path is worth knowing before it surprises anyone: **Task
+Scheduler discards stdout and stderr.** Under the task there is no journal, so the two
+`listening on …` lines and the owner line of a failed bind are simply gone. Diagnosing a
+task that does not work therefore means starting the same binary by hand in a console —
+`%LOCALAPPDATA%\browser-control\browser-control-bridge.exe --http` — and reading what it
+writes.
+
+**Measured for this stage:** the cross-build and clippy for `x86_64-pc-windows-gnu`, the
+`PE32+` file type, and the four unit cases in `src/platform/windows.rs` (which are
+compiled for the Windows target, not run there). **Not measured:** `GetExtendedTcpTable`,
+`GetFileType`, `ctrl_c` and the task import on a real Windows machine — `docs/38`,
+`## Bekannte Lücken` says so, and `docs/30` criterion 1 is the operator's check. A quick
+first measurement: start the bridge twice (once by hand, once through the task) — the
+second start must print `port 127.0.0.1:8110 in use, owner pid=<pid> name=<name>` with the
+first process' PID, not `Besitzer nicht ermittelbar`.
 
 ## Checking the build
 

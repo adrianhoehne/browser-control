@@ -1,6 +1,8 @@
 //! Entry point of the bridge: read configuration, refuse to start without a
 //! usable token, bind the extension listener, serve the hub on every accepted
-//! connection, serve MCP on stdin/stdout and stop cleanly on SIGTERM/SIGINT.
+//! connection, serve MCP on stdin/stdout and stop cleanly on SIGTERM/SIGINT — on
+//! Windows on the one signal a console produces, Ctrl+C (`received SIGINT`; there is
+//! no SIGTERM there).
 //!
 //! Stages 2a (`docs/38`) and 2b gave this file its configuration, its listener and
 //! the WebSocket codec; 2c added the socket glue for the hub — the per-connection
@@ -9,8 +11,10 @@
 //! integration tests cannot see is a start path nothing measures, which is how a
 //! swallowed `hello` and a `400` where a `426` belongs stayed invisible. 2d adds the
 //! tool layer and wires the stdio loop in here; 2e adds the second surface, `/mcp` over
-//! HTTP, behind the `--http` flag. What stays in this file is the start itself —
-//! configuration, bind, accept loop, signals, exit codes.
+//! HTTP, behind the `--http` flag. Stage 3 (`docs/38`) adds no new path in this file: the
+//! two Windows answers live in `platform/windows.rs` and `stdio.rs`, and what is here is
+//! the one line that is genuinely platform-specific — the signal. What stays in this file
+//! is the start itself — configuration, bind, accept loop, signals, exit codes.
 //!
 //! stdout is the JSON-RPC channel and nothing else: every line this file writes
 //! goes to stderr through `log::log_line`.
@@ -349,8 +353,14 @@ mod stop {
     }
 }
 
-/// Windows has no SIGTERM. `ctrl_c` is the stop request a console process gets, and
-/// the Task Scheduler path of stage 3 of `docs/38` is built on it.
+/// Windows has no SIGTERM, and Node never sees one there: `bridge/bridge.mjs:161`–`:162`
+/// registers `SIGTERM` and `SIGINT`, and only the second one ever fires on a console. So
+/// the line here is **`received SIGINT`** — the template's own spelling for the one signal
+/// Windows produces — and not `received SIGTERM`, which would claim a signal the platform
+/// does not have. `tokio::signal::ctrl_c()` is Ctrl+C, and it also fires when a console
+/// window is closed; Ctrl+Break is `SIGBREAK` and is deliberately *not* wired up, because
+/// the template does not handle it either (no `SIGBREAK` in `bridge.mjs`), and a second
+/// exit path nothing measures is a second exit path that can rot.
 #[cfg(not(unix))]
 mod stop {
     pub struct Signals;
@@ -360,6 +370,9 @@ mod stop {
             Ok(Signals)
         }
 
+        /// No handler to register: `ctrl_c` is installed by tokio on first poll, and a
+        /// signal during the bind cannot arrive before that on a console anyway — the
+        /// process is the one holding the terminal.
         pub async fn next(&mut self) -> &'static str {
             let _ = tokio::signal::ctrl_c().await;
             "received SIGINT"
