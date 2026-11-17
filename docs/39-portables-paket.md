@@ -210,9 +210,11 @@ dann `mkdir -p "$SANDBOX/home"` und `touch "$SANDBOX/marker"`, dann `sleep 1`
    überspringt ohne sie); `npm run check` ⇒ 0; `npm run test:bundle` ⇒
    `# fail 0`;
    Secret-Grep beidseitig Exit 1.
-11. **`start.cmd` ist Windows-tauglich.** `unzip -p <win-zip> start.cmd | grep -c
-    $'\r'` ⇒ **> 0** (CRLF) und `unzip -p <win-zip> start.cmd | grep -c
-    'Get-Random'` ⇒ **0** (CSPRNG, nicht der Zufall der Shell).
+11. **`start.cmd` ist Windows-tauglich.** Das Zip hat eine Ordnerebene, deshalb
+    mit Muster: `unzip -p <win-zip> '*/start.cmd' | grep -c $'\r'` ⇒ **> 0**
+    (CRLF, per `.gitattributes` gesichert) und `unzip -p <win-zip>
+    '*/start.cmd' | grep -c 'Get-Random'` ⇒ **0** (CSPRNG, nicht der Zufall der
+    Shell).
 
 ## Dev plan
 
