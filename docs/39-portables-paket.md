@@ -118,6 +118,12 @@ aus `scripts/package.sh`.
 
 ## Testing
 
+**Vorbedingung:** die Fälle brauchen ein gebautes Release-Binary
+(`bridge-rs/target/x86_64-unknown-linux-musl/release/`) und `zip`/`unzip`. Fehlt
+das Binary, **scheitern** sie (kein Skip — ein grüner Lauf ohne Prüfung wäre
+schlimmer); fehlen `zip`/`unzip`, skippen die zwei Zip-Fälle wie in
+`test/package.test.js`.
+
 | Datei | Fall | Was er beweist |
 |---|---|---|
 | `test/bundle/bundle.test.js` | `bundle_linuxZip_shouldContainExactlyTheSevenEntries` | sechs Dateien (Binary, XPI, `start.sh`, `README.txt`, `FIREFOX.md`, `CLIENTS.md`) plus Ordner-Eintrag — und nichts sonst (kein `data/`, kein `target/`, keine `.git`) |
@@ -136,14 +142,19 @@ aus `scripts/package.sh`.
    Dateien** (Binary, XPI, `start.sh`, `README.txt`, `FIREFOX.md`, `CLIENTS.md`)
    **plus den Ordner-Eintrag** der obersten Ebene — kein `data/`, keine
    `target/`-Reste, keine `.git`.
-2. **Kein Geheimnis im Zip.** `unzip -Z1 … | grep -cE '(^|/)data/'` ⇒ 0 und
+2. **Das Binary ist ausführbar im Zip.** `unzip -Z <linux-zip> | grep -cE
+   '^-rwxr-xr-x.*browser-control-bridge$'` ⇒ **1**, und für `start.sh` ⇒ **1**.
+3. **Kein Geheimnis im Zip.** `unzip -Z1 … | grep -cE '(^|/)data/'` ⇒ 0 und
    `unzip -p … start.sh | grep -acE '[0-9a-f]{32,}'` ⇒ 0.
-3. **Es läuft ohne Installation.** In einem temporären Ordner entpackt, mit
+4. **Es läuft ohne Installation.** In einem temporären Ordner entpackt, mit
    **freien Ports außerhalb der reservierten Bereiche** — 8110/8111 gehören dem
    Dienst, 18110–18119 den Test-Suiten (`bridge-rs/tests/common/mod.rs`):
    `BC_BIND=127.0.0.1:18130 BC_HTTP_PORT=18131 ./start.sh > run.log 2>&1 &
    PID=$!` (stdout und stderr zusammen, weil das Skript die drei Zeilen auf
-   stdout druckt und die Bridge auf stderr loggt) ⇒ `run.log` enthält
+   stdout druckt und die Bridge auf stderr loggt — `run.log` also **außerhalb
+   des Baums** oder nach dem Lauf gelöscht, es enthält das lebende Token); auf die Zeile warten statt
+   schlafen: `timeout 20 sh -c 'until grep -q "listening on 127.0.0.1:18130"
+   run.log; do sleep 0.2; done'; echo $?` ⇒ **0**; dann enthält `run.log`
    (Teilstring, mit Zeitstempel davor) `listening on 127.0.0.1:18130 log=info`
    **und** `listening on 127.0.0.1:18131 for POST /mcp`; `data/token` existiert
    mit 0600 und 64 Zeichen; **ohne** Token ⇒ `curl -s -o /dev/null -w
@@ -152,7 +163,7 @@ aus `scripts/package.sh`.
    $(cat <ordner>/data/token)" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
    http://127.0.0.1:18131/mcp` = `200`. **Beenden: `kill $PID`** — niemals
    `pkill -f`, das trifft den Dienst (`CONTRIBUTING.md`).
-4. **Nichts außerhalb des Ordners.** Nach `$SANDBOX` entpackt, startet der Lauf mit
+5. **Nichts außerhalb des Ordners.** Nach `$SANDBOX` entpackt, startet der Lauf mit
    `HOME="$SANDBOX/home"`. Vorher `touch "$SANDBOX/marker"`, nachher
    `find "$SANDBOX" -newer "$SANDBOX/marker" -not -path "$SANDBOX/browser-control-*"
    -not -name 'run.log' -print` ⇒ **leer** — was das Skript in seinem eigenen
@@ -160,29 +171,30 @@ aus `scripts/package.sh`.
    `~/.config/browser-control/token` vor und nach dem Lauf gleich
    (`sha256sum` auf beiden Seiten vergleichen). Schreibvorgänge in `/tmp` und
    `XDG_*` sind nicht Vertragsgegenstand.
-5. **Das Token überlebt.** Vorher `kill $PID` aus Kriterium 3 (sonst ist der
-   Port belegt). Zweiter Start ⇒ `grep -c '^token: '` liefert dieselben 64
-   Zeichen wie beim ersten, `cmp` auf eine Kopie von
-   `<ordner>/data/token` ⇒ identisch; `stat -c %a <ordner>/data/token` ⇒ `600`.
-6. **Die drei gedruckten Zeilen stimmen mit den Ports.** `grep -c
+6. **Das Token überlebt.** Vorher `kill $PID` aus Kriterium 4 (sonst ist der
+   Port belegt). Kopie von `<ordner>/data/token` sichern, zweiter Start ⇒
+   `cmp <kopie> <ordner>/data/token` ⇒ **identisch** (das entscheidet die
+   Gleichheit; `grep -c '^token: '` sagt nur, dass die Zeile existiert) und
+   `stat -c %a <ordner>/data/token` ⇒ `600`.
+7. **Die drei gedruckten Zeilen stimmen mit den Ports.** `grep -c
    '^endpoint: ws://127.0.0.1:18130$' run.log` ⇒ **1**, `grep -c
    '^http: http://127.0.0.1:18131/mcp$' run.log` ⇒ **1**, `grep -cE '^token:
    [0-9a-f]{64}$' run.log` ⇒ **1**. Ein Skript, das 8110 druckt und auf 18130
    lauscht, fällt hier durch — das ist der teuerste Fehler, den das Paket machen
    könnte.
-7. **Die Anleitungen liegen im Zip.** `unzip -Z1 <zip> | grep -cE
+8. **Die Anleitungen liegen im Zip.** `unzip -Z1 <zip> | grep -cE
    '/(FIREFOX|CLIENTS)\.md$'` ⇒ **2**; ihr Inhalt ist `docs/41`.
-8. **Beide Zips tragen dieselbe Version**, und die kommt aus **einer** Quelle:
+9. **Beide Zips tragen dieselbe Version**, und die kommt aus **einer** Quelle:
    `extension/manifest.json` (`scripts/package.sh` liest sie dort schon).
    Beweis: `unzip -l dist/browser-control-<v>-linux-x86_64.zip | grep -c
    'browser-control-<v>.xpi'` ⇒ 1, dasselbe für das Windows-Zip, und
    `<v>` = `node -p 'require("./extension/manifest.json").version'`.
-9. **Der Rest bleibt grün.** `npm test` ⇒ `# fail 0`, `# cancelled 0`
+10. **Der Rest bleibt grün.** `npm test` ⇒ `# fail 0`, `# cancelled 0`
    (`# skipped` hängt an `zip`/`unzip` auf der Maschine — `test/package.test.js`
    überspringt ohne sie); `npm run check` ⇒ 0; `npm run test:bundle` ⇒
    `# fail 0`;
    Secret-Grep beidseitig Exit 1.
-10. **`start.cmd` ist Windows-tauglich.** `unzip -p <win-zip> start.cmd | grep -c
+11. **`start.cmd` ist Windows-tauglich.** `unzip -p <win-zip> start.cmd | grep -c
     $'\r'` ⇒ **> 0** (CRLF) und `unzip -p <win-zip> start.cmd | grep -c
     'Get-Random'` ⇒ **0** (CSPRNG, nicht der Zufall der Shell).
 
@@ -196,20 +208,19 @@ Bündel-Skript: `bundle.sh`, nicht „Bundel").
 
 `start.sh` erfüllt den Vertrag oben; `start.cmd` dasselbe für Windows. `bundle.sh`
 baut nichts: es nimmt je Ziel ein Binary aus `bridge-rs/target/<ziel>/release/`
-oder aus `--binary <ziel>=<pfad>` (zweimal angebbar; so kommen sie in CI als
-Artefakt an) und endet mit Exit 1, wenn eines fehlt; es ruft
+oder aus `--binary <ziel>=<pfad>` (zweimal angebbar; für lokale Läufe und fremde
+Binaries — in CI liegen sie an ihrem `target`-Pfad) und endet mit Exit 1, wenn
+eines fehlt; es ruft
 `scripts/package.sh` für die XPI, kopiert die Vorlagen, setzt `0755` auf
-`start.sh`, schreibt die Zips und prüft den Inhalt gegen die Soll-Liste.
+`start.sh` **und** auf das Binary (Artefakte aus `upload-artifact` verlieren es,
+`zip` schreibt sonst `-rw-r--r--` ins Linux-Zip), schreibt die Zips und prüft den Inhalt gegen die Soll-Liste.
 
 Beweis: `bash scripts/bundle.sh` ⇒ zwei Zips; `unzip -Z1 <zip> | wc -l` ⇒ 7 je
 Zip; `bash -n deploy/portable/start.sh` ⇒ 0.
 
-**Stufe 2 — Die zwei Anleitungen — eigene Spec `docs/41`**
-
-Die Inhalte der Anleitungen (`FIREFOX.md`, `CLIENTS.md`) stehen ab dem Teilen
-vom 2026-11-17 in `docs/41-anleitungen.md`; hier bleiben nur die Dateinamen als
-Zip-Inhalt. Der Abschnitt `## Die zwei Anleitungen` beschreibt weiterhin, was im
-Zip liegt, aber nicht mehr, wie der Text entsteht.
+**Kein Schritt für die Anleitungen.** Ihr Text und ihre Prüfung sind
+`docs/41-anleitungen.md` (geteilt am 2026-11-17); diese Spec nimmt die fertigen
+Dateien nur ins Zip. Reihenfolge: `docs/41` vor `docs/39`, Stufe 3.
 
 **Stufe 3 — Tests**
 
@@ -221,7 +232,8 @@ Dateien: `test/bundle/bundle.test.js` (die sieben Fälle aus `## Testing`),
 `bundle`-Job auf (`docs/40`). Wer sie unter `test/` legte, machte die Node-Suite
 von einem gebauten Binary abhängig.
 
-Beweis: `npm run test:bundle` ⇒ `# fail 0`, `# skipped 0`.
+Beweis: `npm run test:bundle` ⇒ `# fail 0` (ohne `# skipped 0` — der hängt an
+`zip`/`unzip` auf der Maschine).
 
 Die **Startvorlagen und `README.txt`** liegen unter `deploy/portable/`, die
 **Anleitungen** unter `docs/portable/`; `bundle.sh` kopiert aus beiden Bäumen.

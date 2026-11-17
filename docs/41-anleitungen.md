@@ -56,9 +56,11 @@ Die Schritte, in dieser Reihenfolge:
 7. Das Token aus der Zeile `token: …` des Startfensters eintragen.
 8. Speichern.
 9. Die Erweiterung in `about:debugging` einmal neu laden.
-10. **Warnung, vor Schritt 9 oder als eigener Schritt:** die Erweiterung ist
-    temporär. Nach einem Firefox-Neustart ist sie weg, und Schritt 3 bis 9
-    müssen wiederholt werden. Endpunkt und Token bleiben gespeichert.
+
+**Die Warnung steht am Anfang, nicht am Ende:** als Schritt 2, direkt vor dem
+Laden — „The extension is temporary. After a Firefox restart it is gone. Repeat
+steps 3 to 9. The endpoint and the token stay saved." Wer sie erst nach dem
+letzten Schritt liest, hat sie zu spät gelesen.
 
 Ein Schlusssatz: dass im Startfenster `endpoint:` und `http:` stehen und welche
 Adresse wofür gilt (Extension bekommt `ws://…:8110`, der MCP-Client
@@ -88,8 +90,11 @@ Die Schritte, in dieser Reihenfolge:
    Hinweis, dass dieser Client das Token in seiner Konfiguration ablegt.
 6. **Generisches Muster** — ein JSON- und ein TOML-Ausschnitt für Clients, die
    hier nicht genannt sind: Server-URL, Kopfzeile `Authorization: Bearer …`.
-7. Prüfen: der Client listet dreizehn Werkzeuge, das erste heißt
-   `browser_status`.
+7. Prüfen: der Client listet **dreizehn** Werkzeuge. `browser_status` aufrufen,
+   mit `browser_open_tab` eine Seite öffnen, mit `browser_read` ihren Text
+   lesen. Die Namen erscheinen je Client unterschiedlich (pi stellt
+   `mcp__browser-control__` voran, Codex und OpenCode zeigen sie
+   unverändert) — die Anleitung nennt beide Schreibweisen.
 8. Schlusssatz: dasselbe Token gilt für Firefox **und** den Client.
 
 Die Befehle in Schritt 4 und 5 sind am 2026-11-17 gegen die installierten CLIs
@@ -107,11 +112,11 @@ fehlender Schritt auffällt:
 | Datei | Fall | Was er beweist |
 |---|---|---|
 | `test/bundle/bundle.test.js` | `guides_shouldStartAtStepOne` | beide Dateien beginnen mit `1.` und haben mindestens fünf numerierte Schritte |
-| `test/bundle/bundle.test.js` | `guides_shouldNameTheSameTokenAsTheStartScript` | in `CLIENTS.md` steht das Wort `token` in derselben Schreibweise wie im Startskript-Abschnitt von `docs/39` |
+| `test/bundle/bundle.test.js` | `guides_shouldNameThePrintedLines` | `CLIENTS.md` enthält die drei Zeilen, die `start.sh` druckt, in derselben Form (`endpoint: `, `http: `, `token: `) |
 
 ## Acceptance criteria
 
-1. **Beide Dateien existieren und sind Englisch.** `grep -c '^1\. '
+1. **Beide Dateien existieren und sind gegliedert.** `grep -c '^1\. '
    docs/portable/FIREFOX.md docs/portable/CLIENTS.md` ⇒ je **1**;
    `grep -cE '^[0-9]+\. ' docs/portable/FIREFOX.md` ⇒ **≥ 9**,
    `grep -cE '^[0-9]+\. ' docs/portable/CLIENTS.md` ⇒ **≥ 7**.
@@ -119,17 +124,22 @@ fehlender Schritt auffällt:
    docs/portable/FIREFOX.md` ⇒ **≥ 1**; `grep -c
    'http://127.0.0.1:8111/mcp' docs/portable/CLIENTS.md` ⇒ **≥ 3** (pi, Codex,
    OpenCode).
-3. **Sie warnen vor der Temporär-Eigenschaft.** `grep -ci 'temporary'
-   docs/portable/FIREFOX.md` ⇒ **≥ 1**, und der Satz steht **vor** dem letzten
-   Schritt (Zeilenvergleich `grep -n`).
+3. **Sie warnen vor der Temporär-Eigenschaft, bevor sie beißt.**
+   `grep -ci 'temporary' docs/portable/FIREFOX.md` ⇒ **≥ 1**, und die erste
+   Fundstelle steht **vor** dem letzten numerierten Schritt:
+   `test "$(grep -ni 'temporary' docs/portable/FIREFOX.md | head -1 | cut -d: -f1)"
+   -lt "$(grep -nE '^[0-9]+\. ' docs/portable/FIREFOX.md | tail -1 | cut -d: -f1)"`
+   ⇒ Exit **0**.
 4. **Kein Werkzeugname ist erfunden.** Die drei Namen in `CLIENTS.md`
    (`browser_open_tab`, `browser_status`, `browser_read`) kommen in
    `docs/portable/CLIENTS.md` **und** in `scripts/parity/expected/1-initialize-and-tools-list.txt`
    vor: `grep -c` je Name in beiden Dateien ⇒ je ≥ 1.
-5. **Das Zip enthält sie.** `unzip -Z1 <zip> | grep -cE '/(FIREFOX|CLIENTS)\.md$'`
-   ⇒ **2**.
-6. **Kein Stil-Lint im Baum.** `grep -rl 'ste-lint' . --exclude-dir=node_modules
-   --exclude-dir=.git; echo $?` ⇒ **1**.
+5. **Das Zip enthält sie.** `unzip -Z1
+   dist/browser-control-<version>-linux-x86_64.zip | grep -cE
+   '/(FIREFOX|CLIENTS)\.md$'` ⇒ **2**.
+6. **Kein Stil-Lint im Baum.** `grep -rl 'ste-lint' package.json scripts test
+   .github 2>/dev/null; echo $?` ⇒ **1** (die Specs selbst nennen das Wort, weil
+   sie die Entscheidung dokumentieren — sie zählen nicht).
 
 ## Dev plan
 
@@ -148,6 +158,9 @@ Dateien: `docs/portable/CLIENTS.md`.
 Beweis: Kriterien 1, 2, 4.
 
 **Stufe 3 — Struktur-Tests und Zip**
+
+Setzt `docs/39`, Stufe 1 voraus (dort entstehen `scripts/bundle.sh` und
+`test/bundle/bundle.test.js`).
 
 Dateien: `test/bundle/bundle.test.js` (die zwei Fälle aus `## Testing`),
 `scripts/bundle.sh` (kopiert `docs/portable/*.md` ins Zip).

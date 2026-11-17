@@ -26,7 +26,7 @@ Branch-Protection.
 ## Ziel
 
 - **Job `unit`, browserfrei:** `npm run check`, `npm test`,
-  `npm run test:bundle`, `npm run test:ci`, `cargo test -- --test-threads=1`,
+  `npm run test:ci`, `cargo test -- --test-threads=1`,
   `cargo clippy --all-targets -- -D warnings` (beide Ziele),
   `scripts/parity.sh --impl rust --check` (7/7) und `--self-test`
   (`7/7 rot wie erwartet`).
@@ -78,7 +78,8 @@ PING 2026-11-17T15:15:48.205Z                     (die Seite selbst, 4 s später
    darauf zeigen. `E2E_TOKEN_FILE` benennt sie.
 3. **Test-Kopie der Erweiterung bauen** (Verzeichnis, **kein Zip**): `extension/`
    kopieren, dann **zwei Ersetzungen** in der Kopie, beide mit gezähltem Anker
-   (`grep -c` ⇒ genau 1, sonst `seam moved` und Exit 1):
+   (`grep -Fc` ⇒ genau **1**, sonst `seam moved` und Exit 1 — `grep -F`, weil
+   der zweite Anker `[` und `]` enthält und als BRE nie träfe):
 
    | Anker (vorher) | nachher |
    |---|---|
@@ -112,11 +113,17 @@ PING 2026-11-17T15:15:48.205Z                     (die Seite selbst, 4 s später
 9. **Auf den Beacon warten.** Deckel 30 s (Messwert 4 s, also 7-fach). **Das ist
    der Beweis:** die Bridge könnte lügen, die geladene Seite nicht.
 10. **Aufräumen per PID** — Bridge, Beacon, `web-ext` **und** das von `web-ext`
-    gestartete Firefox, auch im Fehlerfall. Auf Windows `taskkill /T /PID <pid>`
-    (der Baum!), auf POSIX `kill`; im Node-Skript `process.kill(pid, "SIGTERM")`
-    bzw. `taskkill`. **Niemals `pkill -f`/`taskkill /IM`** — der Betreiber-Dienst
-    hat dieselbe Kommandozeile, und genau das hat am 17.11. den Dienst zweimal
-    beendet.
+    gestartete Firefox, auch im Fehlerfall.
+
+    **Firefox bekommt einen Wrapper**, weil `web-ext` seine PID nicht
+    herausgibt: `--firefox <wrapper>` mit einem Zwei-Zeiler, der seine PID in
+    eine Datei schreibt und dann `exec firefox "$@"` macht
+    (`echo $$ > <pidfile>; exec <firefox> "$@"`). Aufgeräumt wird diese PID.
+
+    Auf Windows `taskkill /T /PID <pid>` (der Baum!), auf POSIX `kill`; im
+    Node-Skript `process.kill(pid, "SIGTERM")` bzw. `taskkill`. **Niemals
+    `pkill -f`/`taskkill /IM`** — der Betreiber-Dienst hat dieselbe
+    Kommandozeile, und genau das hat am 17.11. den Dienst zweimal beendet.
 
 **Warum der Patch und kein Klick:** die Erweiterung liest Endpunkt und Token nur
 aus `storage.local`; `about:debugging` lässt sich nicht per Skript bedienen.
@@ -133,7 +140,7 @@ Bereiche — 8110/8111 gehören dem laufenden Dienst, 18110–18119 den Test-Sui
 |---|---|---|
 | Verbinden | 60 s | gewählt, 15 × Messwert (4 s) |
 | Beacon | 30 s | gewählt, 7 × Messwert (4 s) |
-| `web-ext`-Start | ~4 s | gemessen |
+| bis `extension connected` | 4 s | gemessen (nicht die Startzeit von `web-ext`) |
 
 ## Die Jobs
 
@@ -170,12 +177,13 @@ fünf Jobs, `release` mit `if: startsWith(github.ref, 'refs/tags/v')`.
 
 ```
 cargo build --release --target x86_64-unknown-linux-musl / -windows-gnu
-npm run check && npm test && npm run test:bundle && npm run test:ci
+npm run check && npm test && npm run test:ci
 cargo test -- --test-threads=1
 cargo clippy --all-targets -- -D warnings            (beide Ziele)
 bash scripts/parity.sh --impl rust --check
 bash scripts/parity.sh --self-test
-bash scripts/bundle.sh
+bash scripts/bundle.sh            # vor den Bundle-Tests: sie prüfen die Zips
+npm run test:bundle
 → "ci-local: alle Schritte grün"
 ```
 
@@ -226,7 +234,8 @@ keinen Browser und ist als `e2e_seamPatch_shouldFindBothLines` gepinnt.
 3. **Der Seam ist gepinnt.** `node scripts/e2e/run.mjs --self-check --source
    extension` ⇒ Exit 0; auf einer **Kopie** mit `sed -i
    's/DEFAULT_ENDPOINT/ENDPOINT/g' <kopie>/background.js` ⇒ Exit 1 mit
-   `seam moved`. Die getrackte Datei bleibt unangetastet.
+   `seam moved`. Die getrackte Datei bleibt unangetastet:
+   `test -z "$(git status --porcelain extension/)"` ⇒ Exit **0**.
 4. **Unit und E2E sind getrennt.** `grep -c 'scripts/e2e/run.mjs'
    .github/workflows/test.yml` ⇒ **1**; `grep -c 'runs-on: windows-latest'` ⇒
    **1**; `awk '/^  unit:/,/^  [a-z]+:/' .github/workflows/test.yml | grep -c
@@ -314,7 +323,22 @@ heißt; das Negativkriterium zum Seam ohne Kommando und auf einer getrackten
 Datei; Kriterium 2 prüfte den Token-Pfad statt der Beacon-Unabhängigkeit;
 `npm run test:ci` lief nirgends; Jobnamen und Artefaktpfade nicht festgelegt.
 
-### Runde 2 — steht aus
+### Runde 2 — 2026-11-17, `grizzled-senior-dev`: 🔧, Blocker dabei
+
+Fünf Blocker: `bundle` lud nur ein Binary; `release` stand in einer zweiten
+Workflow-Datei, wo `needs`/`download-artifact` nicht greifen; `unit` führte
+`test:bundle` vor dem Build; Stufe 2 hing an Stufe 3; der zweite Seam-Anker war
+als Einfügung beschrieben.
+
+### Runde 3 — 2026-11-17, `grizzled-senior-dev`: 🔧, keine Blocker mehr
+
+Sieben Einzeiler: `test:bundle` stand noch im `## Ziel` des `unit`-Jobs;
+`ci-local.sh` baute die Zips nach den Bundle-Tests; der Anker `stored[TOKEN_KEY]`
+braucht `grep -F`; Firefox lässt sich ohne Wrapper-PID nicht aufräumen; die
+Rundenzählung im `## Review` fehlte; „getrackte Datei unangetastet" ohne
+Kommando; die 4 s waren falsch zugeordnet.
+
+### Runde 4 — steht aus
 
 ## Log
 
@@ -330,6 +354,11 @@ Datei; Kriterium 2 prüfte den Token-Pfad statt der Beacon-Unabhängigkeit;
   `extension connected` nach 4 s, `open tab=2`, Beacon-Treffer 4 s später.
 - **2026-11-17, Abspaltung:** dieser Abschnitt war Teil von `docs/39`; der
   Spec-Review hat ihn dort als zweites Inkrement beanstandet (M8).
+- **Runde 3 — übernommen:** `test:bundle` aus dem `## Ziel` des `unit`-Jobs
+  gestrichen; `ci-local.sh` baut die Zips **vor** den Bundle-Tests; `grep -Fc`
+  für beide Anker; Firefox über einen PID-Wrapper aufgeräumt; Runden 2 und 3 im
+  `## Review` eingetragen; `git status --porcelain extension/` als Kommando;
+  4 s als „bis `extension connected`" benannt.
 - **Runde 2 — übernommen:** `bundle` lädt **beide** Binaries (nach
   `bridge-rs/target/<ziel>/release/`); `release` ist ein Job in **derselben**
   Datei (`needs` und `download-artifact` gelten nicht über Dateigrenzen); 
