@@ -1,15 +1,17 @@
 # browser-control-bridge (Rust)
 
 The Rust bridge: a `[[bin]]` named `browser-control-bridge` that builds for Linux
-and Windows and ports the start path of the Node bridge — read the environment,
-refuse to start without a usable token, bind the extension listener, log what it
-did, and stop cleanly on SIGTERM/SIGINT.
+and Windows and ports the Node bridge — read the environment, refuse to start
+without a usable token, bind the extension listener, serve the extension's
+WebSocket connection and its JSON protocol, log what it did, and stop cleanly on
+SIGTERM/SIGINT.
 
 What it does today, in the order it happens:
 
 1. Reads `BC_BIND` (`host:port`, default `127.0.0.1:8110`), `BC_LOG`
-   (`info`|`debug`) and `BC_HTTP_PORT`. Invalid values fall back to the default
-   instead of failing the start.
+   (`info`|`debug`), `BC_HTTP_PORT`, `BC_HELLO_TIMEOUT_MS` and
+   `BC_CALL_TIMEOUT_MS`. Invalid values fall back to the default instead of
+   failing the start.
 2. Reads the token from `BC_TOKEN_FILE`, else
    `$HOME/.config/browser-control/token`. A missing or unusable token — at least
    32 hexadecimal characters after trimming — exits `2`, which the systemd unit
@@ -17,14 +19,25 @@ What it does today, in the order it happens:
 3. Binds the extension listener and logs
    `listening on 127.0.0.1:8110 log=info`. A bind that fails logs the symbolic
    error code Node prints (`EADDRINUSE`, …), the port's owner when it can be
-   found, and exits `1`, which the unit *does* restart for. Nothing is accepted
-   from the listener yet.
+   found, and exits `1`, which the unit *does* restart for. An `accept` that fails
+   afterwards ends the process the same way (`listener failed on …`); an aborted
+   connection is ignored in silence, as Node ignores `ECONNABORTED`.
+4. Reads one HTTP request head per accepted connection, bounded by the `hello`
+   timeout and by a 16 KiB ceiling. A valid upgrade gets `101` and the WebSocket
+   frame codec; a plain HTTP request is refused with `426 Upgrade Required` and the
+   body `WebSocket upgrade required`; a head that cannot be read, or an upgrade
+   that fails its checks, gets `400`.
+5. Serves the hub's protocol on that connection: `hello` with the token (close
+   `4401` on a mismatch, `4408` when it never arrives), `welcome`, the automatic
+   `status` request, and one response per request. Results, errors and close codes
+   are logged the way the Node bridge logs them.
+
+What is *not* there yet: `/mcp` over stdio and over HTTP, so `--http` is still not
+read. Until those land, the Node bridge under `../bridge/` is the implementation
+that actually runs.
 
 stdout stays untouched: it is the JSON-RPC channel. Every line this binary writes
 goes to stderr, timestamped with `toISOString()`'s format.
-
-The Node bridge under `../bridge/` is unchanged and stays the implementation that
-actually runs.
 
 ## Toolchain
 
@@ -49,9 +62,21 @@ sudo apt install gcc-mingw-w64-x86-64   # provides x86_64-w64-mingw32-gcc
 
 ## Dependencies
 
-One: `tokio` (async runtime, net, signals), with the features listed in
-`Cargo.toml`. `Cargo.lock` is committed, so a build uses the versions the
-measurements used unless someone updates them on purpose.
+Six crates, all named in `docs/38`, `## Dependency changes`:
+
+| Crate | Why |
+|---|---|
+| `tokio` (`rt-multi-thread`, `net`, `time`, `signal`, `sync`, `io-util`, `io-std`, `process`, `macros`) | async runtime, listener, deadlines, signals, channels |
+| `sha1` + `base64` | `Sec-WebSocket-Accept` = Base64 of SHA-1(key + GUID) |
+| `sha2` + `subtle` | the token compare: SHA-256 of both sides, then a constant-time compare |
+| `serde_json` (`preserve_order`) | the hub's JSON protocol; `preserve_order` pulls `indexmap` in, because the unlisted fields of a debug block keep result order |
+
+No WebSocket crate and no HTTP crate: the frame codec, the head reader and the
+two refusal answers are ours, because the close codes, the message limit and the
+bytes behind the handshake are part of the contract.
+
+`Cargo.lock` is committed, so a build uses the versions the measurements used
+unless someone updates them on purpose.
 
 ## Building
 

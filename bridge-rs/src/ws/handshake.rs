@@ -55,7 +55,7 @@ pub fn accept_key(key: &str) -> String {
 /// the header reaches `req.headers`. Measured against the template, `Upgrade:
 /// websocket ` and `Sec-WebSocket-Version: 13` are accepted with `101` — a `Headers`
 /// that claims to be `req.headers` and then answers `400` to them would be lying.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Headers(Vec<(String, String)>);
 
 impl Headers {
@@ -95,7 +95,7 @@ impl Headers {
 
 /// The parts of an HTTP request the upgrade decides on — the same three facts
 /// `upgradeSocket()` read from `req`, and deliberately nothing more.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestHead {
     pub method: String,
     pub headers: Headers,
@@ -142,6 +142,21 @@ fn is_websocket_upgrade(request: &RequestHead) -> bool {
             .get(HEADER_UPGRADE)
             .is_some_and(|value| value.eq_ignore_ascii_case("websocket"))
         && request.headers.get(HEADER_VERSION) == Some("13")
+        && header_has_token(request.headers.get(HEADER_CONNECTION), "upgrade")
+}
+
+/// Whether this request is an upgrade at all — the decision Node's HTTP parser makes
+/// before it decides to emit `upgrade` instead of calling the request handler.
+///
+/// Everything that is *not* an upgrade is a plain HTTP request and belongs on the
+/// `426` path; an upgrade attempt that fails its checks belongs on the `400` path.
+/// The trigger is the same pair the parser uses: an `Upgrade` header, and the
+/// `upgrade` token in `Connection`. The version and the key are deliberately not part
+/// of it — a `Sec-WebSocket-Version: 8` request is a browser that tried, and telling
+/// it `426 Upgrade Required` would hide the version mismatch behind "you did not
+/// ask for an upgrade at all".
+pub fn is_upgrade_attempt(request: &RequestHead) -> bool {
+    request.headers.get(HEADER_UPGRADE).is_some()
         && header_has_token(request.headers.get(HEADER_CONNECTION), "upgrade")
 }
 

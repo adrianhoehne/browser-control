@@ -38,3 +38,14 @@ tokio = { version = "1", features = [
 # module, because the frame codec is ours.
 sha1 = "0.10"
 base64 = "0.22"
+# 2c: the token compare is `sha256(expected)` against `sha256(candidate)` and then
+# a constant-time compare of the two digests` — `==` on `[u8]` bails out at the
+# first differing byte, which is the regression step `subtle` exists to prevent.
+sha2 = "0.10"
+subtle = "2"
+# 2c: the hub is a JSON protocol layer (it parses `hello`, builds the frames and
+# projects results for the debug block), so the `Value` type arrives with it and
+# not with the tool layer of 2d. `preserve_order` is decided, not inherited: the
+# unlisted fields of a debug block are appended in *result* order, and a key-sorted
+# map would print them alphabetically instead.
+serde_json = { version = "1", features = ["preserve_order"] }

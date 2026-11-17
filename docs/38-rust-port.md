@@ -128,7 +128,7 @@ Node-Suite nachgezogen.
 | `bridge-rs/tests/platform.rs` | `findPortOwner_withOwnListeningSocket_shouldNameThisProcess`, `findPortOwner_withReleasedPort_shouldReturnNull` | die `/proc`-Auswertung (Linux-only) |
 | `bridge-rs/tests/ports.rs` | `everyNumber…Range`, `twoEntriesOnOneNumber`, `everyEntry…ExtensionPort` | die Porttabelle aus `tests/common/mod.rs` gegen sich selbst |
 | `bridge-rs/tests/ws.rs` | 13 Fälle unter den Node-Namen (`acceptKey_withRfcSampleKey_*`, `encodeFrame_*`, `frameDecoder_*` (2), `upgradeSocket_*`, `websocket_*` (8)) + 30 `ws_`-Fälle, darunter `ws_onAnAnnouncedOversizedFrame_shouldCloseWith1009BeforeThePayloadArrives`, Ping zwischen zwei Fragmenten, Close-Frame mit einem Byte Payload, fehlende `Sec-WebSocket-Version`, ein Chunk mit vielen kleinen Frames | die Grenze feuert vor dem Puffern; Fragmentzustand überlebt Steuerframes; der Decoder bleibt linear |
-| `bridge-rs/tests/hub.rs` | 55 Fälle: die 14 reinen (`formatStatusLine_*`, `debugBlockOf_*`, `verifyToken_*`), 41 Sitzungsfälle (`hub_*`) und neu `hub_welcomeFrame_shouldCarryTheBridgeVersionAndTheProtocol` | Sitzung, Fristen, Statuszeilen, `welcome` |
+| `bridge-rs/tests/hub.rs` | 55 Fälle: 41 `hub_*` (Sitzung, Fristen, Close-Codes `1002`/`4401`/`4408`/`4409`, kein Geister-Timeout), 9 `debugBlockOf_*` (Whitelist, `<unlisted field>`, `length`, `lengthEach`), 2 `formatStatusLine_*`, 3 `verifyToken_*`; der `welcome`-Frame ist in `hub_afterWelcome_…` gepinnt (ein eigener Fall würde den Zähler 55 verschieben) | Sitzung, Fristen, Statuszeilen, `welcome` |
 | `bridge-rs/tests/mcp.rs` | `mcp_toolsListIsByteIdentical`, `failureTextFor_transcriptNeedsFocus_shouldUseTheExtensionMessage`, die Naht-Fälle (Zahl in 2d) und die Prozessfälle aus 2f | Werkzeuge, deutsche Sätze, stdio |
 | `bridge-rs/tests/http.rs` | 14 portierte (`startHttpTransport_*` aus `test/http-transport.test.js`) + 2 neue (`http_withTheSameAnswerAsStdio_shouldMatch`, `http_rejectsAnOversizedChunkedBody`) = **16** | Auth, Grenzen, Statuscodes |
 | `bridge-rs/tests/bridge.rs` | `mcp_whenStdinEnds_shouldExitZeroAfterASingleShutdownLine`, `mcp_withAnIgnoredStdin_shouldKeepRunningAndListeningAfterTheEof` | stdin-Lebenszyklus |
@@ -262,15 +262,33 @@ cargo test --manifest-path bridge-rs/Cargo.toml --test ws 2>&1 | grep -cE '^test
 
 **Stufe 2c — `hub`**
 
-Dateien: `src/hub.rs`, `tests/hub.rs`. Der Hub kennt keinen Socket, sondern
+Dateien: `src/hub.rs`, `tests/hub.rs`, `src/lib.rs` (ein `pub mod hub;`),
+`src/main.rs` (der Hub muss im Startpfad hängen, sonst misst `--only 4` ein
+Binary ohne Verhalten), `bridge-rs/README.md`, `Cargo.toml` (`sha2`, `subtle`,
+**`serde_json` mit `preserve_order`** — der Hub kann ohne JSON-Werttyp weder
+`hello` parsen noch Frames bauen; damit wird der `Cargo.toml`-Schritt von 2d ein
+No-op), `Cargo.lock`.
+
+**Kein `4402`.** Die Vorlage kennt nur `1002` für ein kaputtes `hello`
+(`hub.mjs:634`); eine **abweichende Protokollversion** wird nicht abgelehnt,
+sondern als `protocol=<n|unknown>` geloggt und akzeptiert (ein Reload darf den
+Betreiber nicht aussperren). Wer hier einen Close-Code erfindet, verschiebt
+Verhalten.
+
+Der Hub kennt keinen Socket, sondern
 `mpsc::Sender<Outbound>` + `Arc<AtomicBool>`; `close(code, reason)` geht als
 `Outbound::Close` durch denselben Kanal. Fristen über `tokio::time` mit den
 Werten aus der Config (Tests: 100–300 ms).
 
 Proof:
 ```
-cargo test --manifest-path bridge-rs/Cargo.toml --test hub 2>&1 | grep -cE '^test (hub|formatStatusLine|debugBlockOf|verifyToken)_[A-Za-z0-9]+ \.\.\. ok'   # ⇒ 55
-cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check --only 4        # ⇒ 1/7
+cargo test --manifest-path bridge-rs/Cargo.toml --test hub 2>&1 | grep -cE '^test (hub|formatStatusLine|debugBlockOf|verifyToken)_[A-Za-z0-9_]+ \.\.\. ok'   # ⇒ 55
+# Das `_` in der Zeichenklasse ist Pflicht (jeder Name trägt weitere Unterstriche).
+# 55 = 41 `hub_*` (einer davon umbrochen in test/hub.test.js, deshalb zählt die
+# Quelle 54) + 9 `debugBlockOf_*` + 2 `formatStatusLine_*` + 3 `verifyToken_*`.
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check --only 4        # ⇒ 1/1 wie erwartet (Exit 0)
+# `--only` zählt nur die gewählten Vergleiche; im vollen Lauf sind es 3/7
+# (Vergleich 3 braucht 2d, Vergleich 7 braucht 2e).
 ```
 
 **Stufe 2d — Werkzeugschicht und stdio**
@@ -526,6 +544,22 @@ Teil 2 geht erst weiter, wenn diese Runde abgearbeitet ist; gebaut wird nach
   Mixed-Case-Test prüft die Token-Schreibweise wirklich, und fünf Lücken sind
   gepinnt (Ping zwischen Fragmenten, zwei Fragmentierungsrunden, exakte Grenze,
   Ein-Byte-Close, fehlende Version). **72 Rust-Fälle.**
+- **Stufe 2c, Review-Runde (2026-11-17):** zwei Blocker im neuen Kopfleser
+  (`src/head.rs`, `src/link.rs` — aus `main.rs` herausgezogen, damit `tests/`
+  ihn messen kann): ein `hello` im Handshake-Paket wurde nicht zugestellt und
+  die Verbindung endete mit `4408` statt `welcome` (am Binary gemessen), und
+  einfaches HTTP bekam `400` statt `426`. Dazu: `send`-Fehlschlag beendet die
+  Verbindung (sonst 20-s-Timeout statt „could not be sent"), Accept-Fehler
+  loggen `listener failed on …` und enden mit `1` (nur `ECONNABORTED` läuft
+  weiter), `number_field`/`string_field` prüfen Typen wie die Vorlage,
+  `handle_hello_timeout` respektiert `authenticated`, der Peer wird im selben
+  Lock wie der Auftrag gelesen, Kopfleser hat eine Frist und der 16-KiB-Deckel
+  steht **vor** der Terminatorsuche. **134 Rust-Fälle.**
+- **Stufe 2c gebaut (2026-11-17) — Abhängigkeiten:** `sha2`, `subtle`,
+  `serde_json` + `indexmap` (eine Stufe früher als geplant, Begründung in der
+  Dateiliste), Lock: `serde`, `itoa`, `memchr`, `hashbrown`, `equivalent`,
+  `foldhash`. Korrektur am Auftrag: **kein `4402`** — die Vorlage schließt bei
+  kaputtem `hello` `1002` und akzeptiert eine abweichende Protokollversion.
 - **Stufe 2b gebaut (2026-11-17) — Abhängigkeiten:** `sha1 0.10.7`,
   `base64 0.22.1` (transitiv `digest`, `block-buffer`, `crypto-common`,
   `generic-array`, `typenum`, `cpufeatures`, `cfg-if`, `version_check`).

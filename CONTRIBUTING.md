@@ -121,6 +121,12 @@ No commit without green acceptance **and** a `✅` from step 6.
 - **The browser belongs to the operator.** The agent works in its own tab and
   hands it back as soon as the operator steps in; logins, two-factor and passkeys
   are the operator's job.
+- **Clean up by PID, never by pattern.** `pkill -f bridge.mjs` also kills the
+  operator's running service: a probe process started by hand has exactly the
+  same command line (`node …/bridge/bridge.mjs --http`). This happened on
+  2026-11-17 and took the bridge down mid-increment. Kill the PID you started —
+  `$!`, `kill $PID`, or the PID from `ss -ltnp`; for the service use
+  `systemctl --user stop browser-control.service`.
 
 ## References
 

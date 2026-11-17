@@ -7,6 +7,9 @@
 //! start path on top of these modules.
 
 pub mod config;
+pub mod head;
+pub mod hub;
+pub mod link;
 pub mod log;
 pub mod platform;
 pub mod protocol;

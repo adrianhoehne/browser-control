@@ -23,7 +23,7 @@ import { collectFiles } from "../scripts/check.mjs";
 const REPOSITORY_ROOT = path.resolve(import.meta.dirname, "..");
 const CHECK_SCRIPT_PATH = path.join(REPOSITORY_ROOT, "scripts", "check.mjs");
 
-const SKIPPED_DIRECTORIES = new Set([".git", "node_modules"]);
+const SKIPPED_DIRECTORIES = new Set([".git", "node_modules", "target"]);
 const CHECKED_EXTENSIONS = new Set([".js", ".mjs"]);
 
 const SINGLE_LINE = /^checked \d+ files?$/;
@@ -133,11 +133,12 @@ test("main_withSingleCleanFile_reportsSingularSuccessLine", (t) => {
 });
 
 test("main_withSkippedDirectoriesAtAnyDepth_ignoresThemAndCountsTheRest", (t) => {
-  // GIVEN broken files nested inside a `.git` and a `node_modules` directory,
-  // with one clean file beside them:
+  // GIVEN broken files nested inside a `.git`, a `node_modules` and a cargo
+  // `target` directory, with one clean file beside them:
   const root = makeTree(t, {
     "a/.git/x.js": "const = ;\n",
     "a/b/node_modules/y.js": "const = ;\n",
+    "a/target/doc/z.js": "const = ;\n",
     "clean.js": "const a = 1;\n",
   });
 
@@ -146,6 +147,8 @@ test("main_withSkippedDirectoriesAtAnyDepth_ignoresThemAndCountsTheRest", (t) =>
 
   // THEN only the clean file is parsed, so the run is green in the singular;
   // an exclusion that stopped at the top level would parse the broken ones.
+  // The `target` entry keeps `cargo doc` output (72 rustdoc asset files) out of
+  // the count — without it the acceptance number jumps from 33 to 105.
   assert.equal(skipped.status, 0);
   assert.equal(skipped.stderr, "");
   assert.equal(skipped.stdout, "checked 1 file\n");

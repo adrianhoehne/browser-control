@@ -23,7 +23,10 @@ const DEFAULT_ROOT = path.resolve(import.meta.dirname, "..");
 
 // Skipped at any depth, not only at the top: a vendored `.git` or `node_modules`
 // below the root is just as uninteresting as the one beside it.
-const SKIPPED_DIRECTORIES = new Set([".git", "node_modules"]);
+// `target` is cargo's build directory: `cargo doc` writes dozens of rustdoc
+// asset `.js` files there, and they are not product code. Without this the
+// acceptance count jumps from 33 to 105 the first time anyone builds docs.
+const SKIPPED_DIRECTORIES = new Set([".git", "node_modules", "target"]);
 const CHECKED_EXTENSIONS = new Set([".js", ".mjs"]);
 
 // `node --check` prints `<path>:<line>` first and the actual diagnosis second,

@@ -312,7 +312,7 @@ check_ports() {
     name=$(owner_name "$line")
 
     if [[ -z $pid ]]; then
-      die 1 "Port $port ist belegt, Besitzer nicht ermittelbar (ss -ltnp nannte keine PID). Nächster Schritt: 'ss -ltnp | grep :$port' zeigt die Zeile; einen von Hand gestarteten Bridge beendet 'pkill -f bridge.mjs'."
+      die 1 "Port $port ist belegt, Besitzer nicht ermittelbar (ss -ltnp nannte keine PID). Nächster Schritt: 'ss -ltnp | grep :$port' zeigt die Zeile. Den Dienst beendet 'systemctl --user stop browser-control.service'; einen von Hand gestarteten Bridge beendet 'kill <pid>' mit der PID aus genau dieser Zeile — kein 'pkill -f bridge.mjs', das trifft auch den laufenden Dienst."
     fi
 
     own=$(own_service_pid)
