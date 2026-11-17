@@ -485,8 +485,19 @@ Stand 2026-11-16:
 - **`BRIDGE_FAILED`** erreicht die Parität nicht; ein Rust-Unit-Test pinnt ihn.
 - **`test/mcp.test.js`-Fälle, die Node-Verhalten prüfen** (EPIPE,
   `MaxListenersExceededWarning`) fallen ohne Ersatz weg.
-- **Die Zahl der Naht-Fälle** in `test/mcp.test.js` wird in Stufe 2d ausgezählt
-  und im `## Log` eingetragen.
+- **Die Zahl der Naht-Fälle** (ausgezählt in 2d): 148 portierbare Node-Fälle
+  (151 Blattfälle minus 3 stdin-Fälle aus 2f), davon 114 in `tests/mcp.rs` —
+  die Differenz sind ~37 Fälle, die in `for`-Schleifen zusammengefasst sind.
+- **Vier Abweichungen aus 2d:** `is_http_url` akzeptiert `http://user@:80`, wo
+  `new URL()` lokal verweigert (sichtbar nur ohne verbundene Extension:
+  `ExtensionUnavailable` statt der Verweigerung); stdio trennt nur an `\n`,
+  Nodes `readline` auch an einem einzelnen `\r`; eine letzte Zeile **ohne** `\n`
+  beantwortet Rust, die Vorlage nicht; `stdio.rs` loggt `mcp write failed: …`,
+  während die Vorlage still schluckt (bewusst — ein Schreibfehler auf stdout
+  ist ohne Zeile nicht diagnostizierbar). Die EOF-Regel hängt an
+  `/proc/self/fd/0`: ohne gemountetes `/proc` endet die Bridge nicht; auf
+  Windows ist `false` dagegen **deckungsgleich mit der Vorlage**, nicht die
+  Lücke.
 
 ## Open questions
 
@@ -555,6 +566,16 @@ Teil 2 geht erst weiter, wenn diese Runde abgearbeitet ist; gebaut wird nach
   `handle_hello_timeout` respektiert `authenticated`, der Peer wird im selben
   Lock wie der Auftrag gelesen, Kopfleser hat eine Frist und der 16-KiB-Deckel
   steht **vor** der Terminatorsuche. **134 Rust-Fälle.**
+- **Stufe 2d gebaut (2026-11-17):** Werkzeugschicht und stdio. Die Werkzeugliste
+  ist **byte-identisch** (`parity --only 1,2,3` ⇒ 3/3; `tools/list` 7.390 Byte
+  wie die Vorlage), 218 von 218 Antworten über 13 Werkzeuge × 15 Argumentformen
+  stimmen zeichengleich. `tests/mcp.rs` hat **114 Fälle** — portierbar sind
+  **148** Node-Fälle (151 Blattfälle minus die 3 stdin-Fälle, die zu 2f
+  gehören); die Differenz sind ~37 Fälle, die in `for`-Schleifen zusammengefasst
+  sind. **250 Rust-Fälle.** Review-Blocker: die Antwort auf die *letzte* Zeile
+  vor stdin-EOF ging verloren (`printf … | bridge` schrieb 0 Byte) — `serve`
+  wartet jetzt auf die Writer-Task, mit einem Prozessfall
+  (`mcp_process_theAnswerToTheLastLineBeforeStdinEof_shouldReachStdout`).
 - **Stufe 2c gebaut (2026-11-17) — Abhängigkeiten:** `sha2`, `subtle`,
   `serde_json` + `indexmap` (eine Stufe früher als geplant, Begründung in der
   Dateiliste), Lock: `serde`, `itoa`, `memchr`, `hashbrown`, `equivalent`,

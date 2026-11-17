@@ -1,17 +1,18 @@
 //! Entry point of the bridge: read configuration, refuse to start without a
 //! usable token, bind the extension listener, serve the hub on every accepted
-//! connection and stop cleanly on SIGTERM/SIGINT.
+//! connection, serve MCP on stdin/stdout and stop cleanly on SIGTERM/SIGINT.
 //!
 //! Stages 2a (`docs/38`) and 2b gave this file its configuration, its listener and
-//! the WebSocket codec; 2c adds the socket glue for the hub — the per-connection
+//! the WebSocket codec; 2c added the socket glue for the hub — the per-connection
 //! read/write loop, the HTTP head reader and the answers for a request that is not a
 //! handshake. That glue lives in `link.rs` and `head.rs`, not here: a start path the
 //! integration tests cannot see is a start path nothing measures, which is how a
-//! swallowed `hello` and a `400` where a `426` belongs stayed invisible. What stays in
-//! this file is the start itself — configuration, bind, accept loop, signals, exit
-//! codes.
+//! swallowed `hello` and a `400` where a `426` belongs stayed invisible. 2d adds the
+//! tool layer and wires the stdio loop in here; what stays in this file is the start
+//! itself — configuration, bind, accept loop, signals, exit codes.
 //!
-//! `/mcp` over stdio and HTTP arrive after that, so `--http` is still not read.
+//! `/mcp` over HTTP arrives with stage 2e, so `--http` is still not read: stdio is the
+//! only MCP way in, and it is the default operation.
 //!
 //! stdout is the JSON-RPC channel and nothing else: every line this file writes
 //! goes to stderr through `log::log_line`.
@@ -24,13 +25,16 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use tokio::io::BufReader;
 use tokio::net::TcpListener;
 
 use browser_control_bridge::config;
 use browser_control_bridge::hub::Hub;
 use browser_control_bridge::link;
 use browser_control_bridge::log;
+use browser_control_bridge::mcp::ToolContext;
 use browser_control_bridge::platform;
+use browser_control_bridge::stdio;
 
 const EXIT_OK: i32 = 0;
 const EXIT_FAILURE: i32 = 1;
@@ -97,6 +101,20 @@ async fn run() -> i32 {
     // it once keeps both halves of "prove yourself within X" on the same number.
     let head_deadline = Duration::from_millis(configuration.hello_timeout_ms);
 
+    // The stdio half runs beside the listener, in every mode: the tool layer and the hub
+    // share this one process, and a request that waits for the extension must not stop
+    // the listener from accepting the extension's next connection.
+    let tool_context = Arc::new(ToolContext {
+        hub: Arc::clone(&hub),
+        log: Arc::new(|line: &str| log::log_line(line)),
+    });
+    let mut stdio = tokio::spawn(stdio::serve(
+        BufReader::new(tokio::io::stdin()),
+        tokio::io::stdout(),
+        tool_context,
+    ));
+    let mut stdio_ended = false;
+
     loop {
         tokio::select! {
             accepted = listener.accept() => match accepted {
@@ -134,8 +152,35 @@ async fn run() -> i32 {
                 log::log_line(&format!("{signal}, shutting down"));
                 return EXIT_OK;
             }
+            // stdin ended. Whether that is a goodbye depends on what stdin *is*: a pipe or
+            // a socketpair belongs to a client, `/dev/null` belongs to systemd — and a
+            // service that ended on `/dev/null`'s EOF would restart in a loop.
+            ended = &mut stdio, if !stdio_ended => {
+                stdio_ended = true;
+                match ended {
+                    Ok(Ok(())) => {
+                        if stdio_is_a_shutdown_request() {
+                            log::log_line("stdin closed, shutting down");
+                            return EXIT_OK;
+                        }
+                    }
+                    // A read that failed means the channel is unusable, not that the
+                    // bridge failed: the extension listener keeps serving either way.
+                    Ok(Err(error)) => log::log_line(&format!("mcp stdin failed: {error}")),
+                    Err(error) => log::log_line(&format!("mcp task failed: {error}")),
+                }
+            }
         }
     }
+}
+
+/// True when the end of stdin is the client saying goodbye.
+///
+/// Named here so the start path reads as a decision; the rule itself — which file type
+/// descriptor 0 has, and why a pipe and a socketpair count but `/dev/null` does not —
+/// lives in `stdio.rs`, next to the loop it belongs to.
+fn stdio_is_a_shutdown_request() -> bool {
+    stdio::stdin_is_client_channel()
 }
 
 /// The two lines a failed bind writes: what failed, and who owns the port.

@@ -11,6 +11,8 @@ pub mod head;
 pub mod hub;
 pub mod link;
 pub mod log;
+pub mod mcp;
 pub mod platform;
 pub mod protocol;
+pub mod stdio;
 pub mod ws;

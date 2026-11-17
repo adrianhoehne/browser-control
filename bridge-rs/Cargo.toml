@@ -49,3 +49,7 @@ subtle = "2"
 # unlisted fields of a debug block are appended in *result* order, and a key-sorted
 # map would print them alphabetically instead.
 serde_json = { version = "1", features = ["preserve_order"] }
+# 2d: the tool layer's JSON-RPC error object is a struct that serialises itself, so the
+# wire names cannot drift away from the fields. `derive` is the only feature here.
+# `serde` is the same crate `serde_json` is built on — the lock file does not grow.
+serde = { version = "1", features = ["derive"] }
