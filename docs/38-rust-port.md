@@ -578,6 +578,15 @@ Teil 2 geht erst weiter, wenn diese Runde abgearbeitet ist; gebaut wird nach
   nicht grün bekommt, und beide Proof-Zeilen zählten mit `[A-Za-z0-9]` statt
   `[A-Za-z0-9_]` (jeder Node-Name trägt weitere Unterstriche). Die
   Runde-1-Zeile bleibt als Protokoll stehen, wie sie war.
+- **Stufe 2f gebaut (2026-11-17):** Prozesstests und stdin-Lebenszyklus.
+  `tests/bridge.rs` startet das echte Binary für die drei Verträge — Pipe-EOF ⇒
+  Exit 0 mit genau einer Zeile `stdin closed, shutting down`, dasselbe mit
+  verbundener Extension-Sitzung, und `/dev/null` auf stdin ⇒ die Bridge läuft
+  weiter und ihr Port bleibt erreichbar (ohne diese Regel dreht systemd eine
+  Neustartschleife). Die Regel war im Code schon richtig; drei Mutationsproben
+  zeigen, dass die Fälle sie wirklich messen (Prüfung entfernt, Logzeile auf
+  stdout umgeleitet, Abschiedssatz verändert ⇒ je genau ein Fall rot). **279
+  Rust-Fälle**, `parity --impl rust --check` ⇒ **7/7**, Exit 0.
 - **Stufe 2e gebaut (2026-11-17):** `POST /mcp` mit `hyper`/`hyper-util`/
   `http-body-util`; Reihenfolge Pfad → Methode → Token → Körper, `413` vor dem
   ersten Körperbyte, `Connection: close` an jeder Ablehnung, `202` für

@@ -80,12 +80,11 @@ What it does today, in the order it happens:
    `/proc/self/fd/0`). Without that distinction `Restart=on-failure` would turn the
    service into a restart loop.
 
-Stages 2a–2e of `docs/38` are built, so all seven comparisons of `scripts/parity.sh`
+Stages 2a–2f of `docs/38` are built, so all seven comparisons of `scripts/parity.sh`
 are green and the binary is the parity-checked port of `../bridge/`, not a work in
-progress. Stage 2f is the next one: the process tests in `bridge-rs/tests/bridge.rs`,
-the stdin cases and the full parity run. The rest of what is still open is named in
-`docs/38`: the Windows run, the switch-over (`4a`/`4b`) and the operator's live
-measurement of the extension connection.
+progress. What is still open is named in `docs/38`: the Windows stage (3), the
+switch-over (`4a`/`4b`) and the operator's live measurement of the extension
+connection.
 
 stdout is the JSON-RPC channel and nothing else: one JSON line per answer, no BOM,
 no blank line, no log line. Everything diagnostic goes to stderr, timestamped with
@@ -193,6 +192,20 @@ reads stdout. That is the only place where the answer to the last line before EO
 can be measured, because a test runtime outlives `serve()` and a process runtime
 does not. It needs a token file and a port of its own — a temporary one and an
 ephemeral one, never the reserved range — and it runs the same in `cargo test`.
+
+`tests/bridge.rs` starts the binary three times for the three life-cycle contracts:
+a pipe whose end is a client saying goodbye, the same end with a connected
+extension session, and `/dev/null` on stdin, which is what the unit gives the
+service and which must **not** end it. Every child is killed through its own
+`Child` handle, so a failing case leaves no process behind; `pkill -f` is not used
+anywhere in this tree (`CONTRIBUTING.md`).
+
+**The port of a process case cannot come from `BC_BIND=127.0.0.1:0`.**
+`config::parse_bind` maps port `0` to the default `8110` (the documented silent lie,
+ported and not fixed), and `8110` is the operator's own bridge. The number therefore
+comes from a temporary bind that is closed again before the child starts: the kernel
+hands out an ephemeral port, which is also well above the 18110–18119 range
+`tests/common/mod.rs` reserves for the Node suite.
 
 The port numbers in `tests/common/mod.rs` are the same as in `test/ports.js`, so
 `cargo test` and `npm test` must not run side by side — the second run's bridge
