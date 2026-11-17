@@ -3,6 +3,7 @@ name: test
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
   pull_request:
 
 jobs:
@@ -19,3 +20,109 @@ jobs:
       # Keine Abhängigkeiten: kein `npm install` nötig.
       - run: npm run check
       - run: npm test
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The toolchain comes from the runner image; only the two targets and clippy
+      # have to be added. `scripts/parity.sh` starts the Linux binary, so a release
+      # build is not optional.
+      - name: rustup targets and clippy
+        run: rustup target add x86_64-unknown-linux-musl x86_64-pc-windows-gnu && rustup component add clippy
+      - name: mingw for the Windows target
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+      - run: npm run check
+      - run: npm test
+      - run: npm run test:ci
+      - run: cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl
+      - run: cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-pc-windows-gnu
+      # `--test-threads=1`: the cases that start a real bridge bind ports.
+      - run: cargo test --manifest-path bridge-rs/Cargo.toml -- --test-threads=1
+      - run: cargo clippy --manifest-path bridge-rs/Cargo.toml --all-targets --target x86_64-unknown-linux-musl -- -D warnings
+      - run: cargo clippy --manifest-path bridge-rs/Cargo.toml --all-targets --target x86_64-pc-windows-gnu -- -D warnings
+      - run: bash scripts/parity.sh --impl rust --check
+      - run: bash scripts/parity.sh --self-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bridge-linux
+          path: bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bridge-windows
+          path: bridge-rs/target/x86_64-pc-windows-gnu/release/browser-control-bridge.exe
+          if-no-files-found: error
+
+  # The blackbox half: a real Firefox, the extension as a temporary add-on, one
+  # page opened over MCP — and the page itself reports to the beacon. It has to
+  # run where Firefox is installed, so it runs on Windows.
+  e2e:
+    runs-on: windows-latest
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The binary the Windows zip ships, not a fresh debug build: what runs here
+      # is what gets released.
+      - uses: actions/download-artifact@v4
+        with:
+          name: bridge-windows
+          path: bridge-rs/target/x86_64-pc-windows-gnu/release/
+      - run: node scripts/e2e/run.mjs
+        env:
+          E2E_BINARY: bridge-rs/target/x86_64-pc-windows-gnu/release/browser-control-bridge.exe
+
+  bundle:
+    runs-on: ubuntu-latest
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # `scripts/bundle.sh` reads both binaries from the cargo target directory;
+      # the artifacts bring them back there without a second build.
+      - uses: actions/download-artifact@v4
+        with:
+          name: bridge-linux
+          path: bridge-rs/target/x86_64-unknown-linux-musl/release/
+      - uses: actions/download-artifact@v4
+        with:
+          name: bridge-windows
+          path: bridge-rs/target/x86_64-pc-windows-gnu/release/
+      - run: bash scripts/bundle.sh
+      # After the zips, never before: the cases read what the build produced.
+      - run: npm run test:bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portable-zips
+          path: dist/*.zip
+          if-no-files-found: error
+
+  # Same file as `bundle`, and it has to be: `needs:` and `download-artifact` only
+  # see artifacts of their own workflow file.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # `gh release create` braucht einen Repo-Kontext (Remote oder `GH_REPO`);
+      # der ist ohne Checkout nicht da. Der Checkout ist billiger als ein
+      # `--repo`-Flag, das den Workflow an den Repo-Namen bindet.
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: portable-zips
+          path: dist
+          merge-multiple: true
+      - run: gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}

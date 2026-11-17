@@ -82,9 +82,12 @@ These commands must be green before every commit:
 ```bash
 npm test; echo $?                    # 0, contains "^# fail 0" and "^# cancelled 0"
 npm run check; echo $?               # 0
+npm run test:ci; echo $?             # 0 — the CI workflow cases and the E2E seam
 cargo test --manifest-path bridge-rs/Cargo.toml -- --test-threads=1; echo $?   # 0, "^test result: ok"
 cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl; echo $?   # 0
 bash scripts/parity.sh --impl rust --check; echo $?   # 7/7 wie erwartet, 0
+bash scripts/bundle.sh; echo $?      # 0 — before test:bundle, which reads the zips
+npm run test:bundle; echo $?         # 0, 9 cases
 git grep --untracked -nE '[0-9a-f]{32,}' -- . ':(exclude)bridge-rs/Cargo.lock'   # no output, exit 1
 git grep -nE '[0-9a-f]{32,}' -- bridge-rs/Cargo.lock | grep -v 'checksum = "'   # no output, exit 1
 # Two commands, one reason: Cargo.lock carries 64-character crate checksums, and a
@@ -93,6 +96,11 @@ git grep -nE '[0-9a-f]{32,}' -- bridge-rs/Cargo.lock | grep -v 'checksum = "'   
 # exclude from it — minus the lines that are structurally checksums.
 
 ```
+
+`bash scripts/ci-local.sh` runs the `unit` and `bundle` jobs of the CI workflow in
+one go, in the order that matters (builds, then tests, then `bundle.sh` before
+`test:bundle`); `node scripts/e2e/run.mjs` is the blackbox half and needs Firefox.
+Both are described in `docs/40-ci-ablauf.md`.
 
 Plus the criteria of the spec at hand. Where a criterion can only be decided in
 a real browser, the spec says so and the operator ticks it off.

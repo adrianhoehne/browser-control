@@ -5,6 +5,29 @@ Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+**Die CI prüft jetzt, was ausgeliefert wird.** Vorher lief im Workflow nur
+`npm run check` und `npm test` — kein `cargo`, kein `parity.sh`, keine
+Installation. Jetzt gibt es fünf Jobs in einer Datei (`docs/40`).
+
+- **`unit`:** beide Ziele mit `--release`, `cargo test -- --test-threads=1`,
+  `clippy -D warnings --all-targets` für beide Ziele, `parity.sh --check` (7/7)
+  und `--self-test`; `npm run test:ci`; danach die Artefakte `bridge-linux` und
+  `bridge-windows`.
+- **`e2e`** (Windows, Blackbox): Firefox headless, `web-ext@8.9.0` installiert die
+  Erweiterung als temporäres Add-on, `browser_open_tab` über `POST /mcp` öffnet
+  eine Seite, und **die Seite selbst** meldet sich beim Beacon. Ein Lauf mit
+  kaputtem Beacon (`E2E_BEACON_MODE=broken`) ist rot, obwohl die Bridge „open tab"
+  meldet.
+- **`bundle`** baut die zwei Zips aus `docs/39` und lädt `portable-zips` hoch;
+  **`release`** hängt sie bei Tag `v*` an das Release — in derselben Datei, weil
+  `needs` und `download-artifact` nicht über Dateigrenzen gelten.
+- **Neu:** `scripts/e2e/{run,beacon,build-test-extension}.mjs`,
+  `scripts/ci-local.sh` (unit + bundle in CI-Reihenfolge), `npm run test:ci`
+  (11 Fälle in `test/ci/`). `npm test` bleibt binary-frei bei 492 Fällen.
+- **Gemessen (2026-11-17, Linux, Firefox 152):** der volle Lauf endet mit
+  `PING <ISO-8601>` und Exit 0; der kaputte Beacon mit Exit 1 und ohne PING.
+  Der Windows-Lauf steht noch aus.
+
 **Das portable Zip.** `bash scripts/bundle.sh` baut je Plattform ein Zip —
 Binary, XPI, Startskript und zwei Anleitungen —, das ohne Installation läuft.
 

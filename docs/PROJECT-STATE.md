@@ -8,6 +8,55 @@ Log oder einer Spec widerspricht, gilt der Beleg und diese Datei ist falsch.
 
 **Eine Übergabe-Datei gibt es nicht mehr.** Bis 2026-11-12 lag hier `docs/HANDOVER.md` (Stand, Entscheidungen, Betrieb); für die Veröffentlichung ist sie entfallen, weil sie Betriebsdaten trug. Der Stand steht in dieser Datei, das Verfahren in `CONTRIBUTING.md`, die Einrichtung in `INSTALL.md`.
 
+## Stand (2026-11-17): die CI prüft, was ausgeliefert wird
+
+**`docs/40` ist `active`.** `.github/workflows/test.yml` hat fünf Jobs in einer
+Datei: `test` (unverändert: Syntax und `npm test` auf Node 22 und 24, ohne Rust),
+`unit`, `e2e`, `bundle` und `release`. Der Befund, der dazu führte, bleibt richtig:
+vorher lief nur `npm run check` und `npm test` — der grüne Haken sagte nichts über
+die Bridge.
+
+- **`unit`** baut beide Ziele mit `--release`, also die Binaries, die auch
+  ausgeliefert werden; `scripts/parity.sh` und `scripts/bundle.sh` suchen genau
+  dort. Danach `npm run check`, `npm test`, `npm run test:ci`,
+  `cargo test -- --test-threads=1` (echte Bridges binden Ports), `clippy -D
+  warnings --all-targets` für beide Ziele, `parity.sh --check` (7/7) und
+  `--self-test` (7/7 rot). Ergebnis: die Artefakte `bridge-linux` und
+  `bridge-windows`.
+- **`e2e`** läuft auf `windows-latest`, lädt `bridge-windows` in den
+  Cargo-Pfad zurück und führt `node scripts/e2e/run.mjs` aus: Firefox startet
+  headless, `web-ext@8.9.0` installiert die Erweiterung als **temporäres**
+  Add-on, über `POST /mcp` wird `browser_open_tab` auf eine Beacon-Seite
+  gerufen, und **die Seite selbst** meldet sich mit `fetch("/ping")`. Der Beacon
+  ist der Beweis: die Bridge könnte „ok" antworten, die geladene Seite nicht.
+- **`bundle`** holt beide Binaries, baut die zwei Zips (`docs/39`), prüft sie mit
+  `npm run test:bundle` und lädt `portable-zips` hoch. **`release`** steht in
+  derselben Datei (`needs`/`download-artifact` gelten nicht über Dateigrenzen),
+  läuft nur bei Tag `v*`, hat `permissions: contents: write` und hängt beide Zips
+  an das Release.
+- **Lokal:** `bash scripts/ci-local.sh` fährt `unit` und `bundle` in derselben
+  Reihenfolge (Builds → Tests → `parity` → `bundle.sh` **vor** `test:bundle`,
+  weil die Fälle die Zips lesen) und endet mit `ci-local: alle Schritte grün`.
+  `node scripts/e2e/run.mjs` ist der Blackbox-Ablauf, `--only-bridge` seine erste
+  Hälfte ohne Firefox. Alles, was das Skript anlegt, liegt unter `os.tmpdir()`.
+- **Der Seam** ist ein Textpatch auf zwei Zeilen in einer **Kopie** von
+  `extension/` (Endpunkt → `ws://127.0.0.1:18810`, Token als Rückfall in
+  `readSettings`), beide mit `grep -Fc` gezählt. `options.js` trägt denselben
+  Endpunkt-Anker und wird deshalb weder gepatcht noch gezählt. `--self-check`
+  prüft nur die zwei Anker; `test/ci/e2e.test.js` pinnt beide Richtungen
+  (`ok` und `seam moved`).
+- **Ports:** 18810/18811/18990 — außerhalb der 8110/8111 des Dienstes und der
+  18110–18119 der Test-Suiten. Aufgeräumt wird **per PID** (POSIX als
+  Prozessgruppe, Firefox über die PID seines Wrappers, Windows mit
+  `taskkill /T`), nie per Muster.
+
+**Gemessen (2026-11-17, Linux, Firefox 152, Release-Binary):** `run.mjs` ⇒ Exit 0,
+`extension connected` nach dem Start, `open tab=2`, `PING 2026-11-17T16:07:19.390Z`;
+`E2E_BEACON_MODE=broken` ⇒ Exit 1 ohne PING, obwohl die Bridge `open tab=2` meldet;
+`--only-bridge` ⇒ Exit 0 ohne Browser; `npm run test:ci` ⇒ 11 Fälle, `# fail 0`;
+`bash scripts/ci-local.sh` ⇒ Exit 0. **Nicht gemessen:** der `windows-latest`-Lauf
+und damit der `.exe`-Weg im E2E — er ist der erste Lauf nach dem Push.
+
 ## Stand (2026-11-17): das portable Paket ist gebaut
 
 **`docs/39` und `docs/41` sind `active`.** Ein Befehl baut zwei Zips

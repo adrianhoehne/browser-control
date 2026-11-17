@@ -1,6 +1,6 @@
 ---
 description: Der Ablauf in GitHub Actions — Unit-Tests ohne Browser, ein Blackbox-Test auf Windows, der Firefox startet und über MCP eine Seite öffnet, dazu Zip-Bau und Release.
-status: proposed
+status: active
 ---
 
 # Der Ablauf in CI
@@ -347,6 +347,18 @@ Kommando; die 4 s waren falsch zugeordnet.
 
 ## Log
 
+- **2026-11-17, umgesetzt (Stufen 1–4):** `scripts/e2e/{run,beacon,build-test-extension}.mjs`,
+  `test/ci/{workflow,e2e}.test.js`, `npm run test:ci`, `scripts/ci-local.sh`, die fünf
+  Jobs in `.github/workflows/test.yml`, `CONTRIBUTING.md` (Abnahme), `docs/README.md`
+  und `docs/PROJECT-STATE.md`. **Lokal gemessen** (Linux, Firefox 152, Release-Binary
+  `x86_64-unknown-linux-musl`): `run.mjs` ⇒ Exit 0 mit `extension connected`, `open tab=2`,
+  `PING 2026-11-17T16:10:38.636Z`; `E2E_BEACON_MODE=broken` ⇒ Exit 1, keine PING-Zeile,
+  im Bridge-Log aber `open tab=2` (Kriterium 2); `--only-bridge` ⇒ Exit 0 ohne Firefox;
+  `--self-check` ⇒ Exit 0; `npm run test:ci` ⇒ 11 Fälle, `# fail 0`;
+  `bash scripts/ci-local.sh` ⇒ Exit 0. **Der Windows-Lauf bleibt ungemessen** — er ist
+  der erste `windows-latest`-Lauf. `test/ci/e2e.test.js` trägt über den Seam-Fall hinaus
+  zwei Beacon-Fälle (204 mit Treffer, 500 im `broken`-Modus), weil Kriterium 2 sonst nur
+  über den Betreiber-Lauf geprüft wäre.
 - **2026-11-17, Betreiberfrage:** „können wir den Ablauf in git actions auch
   nachbauen und testen?" — ja; der Befund dazu: CI prüft die Bridge heute gar
   nicht.
