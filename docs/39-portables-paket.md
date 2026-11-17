@@ -184,11 +184,12 @@ dann `mkdir -p "$SANDBOX/home"` und `touch "$SANDBOX/marker"`, dann `sleep 1`
    dem Lauf gleich (`sha256sum` beidseitig) — **falls die Datei existiert**;
    fehlt sie (CI-Runner), entfällt der Vergleich und das wird im Lauf notiert. Schreibvorgänge in `/tmp` und
    `XDG_*` sind nicht Vertragsgegenstand.
-6. **Das Token überlebt.** Vorher `kill $PID` aus dem ersten Lauf. Kopie von `<ordner>/data/token` sichern, zweiter Start ⇒
-   `cmp <kopie> <ordner>/data/token` ⇒ **identisch** (das entscheidet die
-   Gleichheit; `grep -c '^token: '` sagt nur, dass die Zeile existiert) und
-   `stat -c %a <ordner>/data/token` ⇒ `600`. Danach `kill $PID` (Ende von
-   Kriterium 7) — danach läuft kein Prozess aus diesem Test mehr.
+6. **Das Token überlebt.** Vorher `kill $PID` aus dem ersten Lauf. Kopie von
+   `<ordner>/data/token` sichern, dann zweiter Start mit derselben Zeile wie in
+   Kriterium 4 (`BC_BIND=127.0.0.1:18130 BC_HTTP_PORT=18131 ./start.sh >
+   "$SANDBOX/run.log" 2>&1 & PID=$!`) ⇒ `cmp <kopie> <ordner>/data/token` ⇒
+   **identisch** (das entscheidet die Gleichheit; `grep -c '^token: '` sagt nur,
+   dass die Zeile existiert) und `stat -c %a <ordner>/data/token` ⇒ `600`.
 7. **Die drei gedruckten Zeilen stimmen mit den Ports.** `grep -c
    '^endpoint: ws://127.0.0.1:18130$' "$SANDBOX/run.log"` ⇒ **1**, `grep -c
    '^http: http://127.0.0.1:18131/mcp$' "$SANDBOX/run.log"` ⇒ **1**, `grep -cE
