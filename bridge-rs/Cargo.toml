@@ -53,3 +53,14 @@ serde_json = { version = "1", features = ["preserve_order"] }
 # wire names cannot drift away from the fields. `derive` is the only feature here.
 # `serde` is the same crate `serde_json` is built on — the lock file does not grow.
 serde = { version = "1", features = ["derive"] }
+# 2e: `POST /mcp` is the one surface a library earns its keep on — chunked request
+# bodies, `Content-Length`, keep-alive and `Connection: close` are HTTP/1.1 details that
+# nobody should re-derive by hand. The extension port keeps its own head reader
+# (`head.rs`), because there the bytes behind the handshake belong to the frame codec.
+hyper = { version = "1", features = ["server", "http1"] }
+# `tokio` only: it is what supplies `TokioTimer`, and with it the header deadline hyper
+# silently drops without a timer. `server` here would only enable `hyper_util::server`
+# (the auto-connection builder), which nothing in this tree uses — `hyper/server` is
+# already switched on by the line above.
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"

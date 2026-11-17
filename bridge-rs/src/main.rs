@@ -8,11 +8,9 @@
 //! handshake. That glue lives in `link.rs` and `head.rs`, not here: a start path the
 //! integration tests cannot see is a start path nothing measures, which is how a
 //! swallowed `hello` and a `400` where a `426` belongs stayed invisible. 2d adds the
-//! tool layer and wires the stdio loop in here; what stays in this file is the start
-//! itself — configuration, bind, accept loop, signals, exit codes.
-//!
-//! `/mcp` over HTTP arrives with stage 2e, so `--http` is still not read: stdio is the
-//! only MCP way in, and it is the default operation.
+//! tool layer and wires the stdio loop in here; 2e adds the second surface, `/mcp` over
+//! HTTP, behind the `--http` flag. What stays in this file is the start itself —
+//! configuration, bind, accept loop, signals, exit codes.
 //!
 //! stdout is the JSON-RPC channel and nothing else: every line this file writes
 //! goes to stderr through `log::log_line`.
@@ -29,10 +27,11 @@ use tokio::io::BufReader;
 use tokio::net::TcpListener;
 
 use browser_control_bridge::config;
+use browser_control_bridge::http;
 use browser_control_bridge::hub::Hub;
 use browser_control_bridge::link;
 use browser_control_bridge::log;
-use browser_control_bridge::mcp::ToolContext;
+use browser_control_bridge::mcp::{self, ToolContext};
 use browser_control_bridge::platform;
 use browser_control_bridge::stdio;
 
@@ -40,12 +39,18 @@ const EXIT_OK: i32 = 0;
 const EXIT_FAILURE: i32 = 1;
 const EXIT_CONFIGURATION: i32 = 2;
 
+/// The flag that adds the second surface. A plain argument like `argv.includes("--http")`
+/// in the template, so its position among the arguments does not matter.
+const HTTP_FLAG: &str = "--http";
+
 #[tokio::main]
 async fn main() {
     std::process::exit(run().await);
 }
 
 async fn run() -> i32 {
+    silence_panic_reports();
+
     let env = config::process_env();
     let configuration = config::load_config(&env);
     let address = log::format_address(&configuration.host, configuration.port);
@@ -95,7 +100,11 @@ async fn run() -> i32 {
         configuration.log_level.as_str()
     ));
 
-    let hub = Arc::new(Hub::new(&configuration, token));
+    // The one secret is needed twice from stage 2e on: the hub compares what the
+    // extension says in its `hello`, the `/mcp` transport compares the bearer header. The
+    // clone is the cheap half — a second hash is what `verify_token` avoids, not a second
+    // copy of the token.
+    let hub = Arc::new(Hub::new(&configuration, token.clone()));
     // The request head on this port is unauthenticated input, and the only deadline
     // the configuration has for unauthenticated input is the `hello` timeout. Reading
     // it once keeps both halves of "prove yourself within X" on the same number.
@@ -111,9 +120,24 @@ async fn run() -> i32 {
     let mut stdio = tokio::spawn(stdio::serve(
         BufReader::new(tokio::io::stdin()),
         tokio::io::stdout(),
-        tool_context,
+        Arc::clone(&tool_context),
     ));
     let mut stdio_ended = false;
+
+    // The second surface, only on request. Bounded after stdio is up, for the reason the
+    // template gives: a client that speaks first must not wait for a free port, and a
+    // failing `/mcp` bind must not cost it the transport that already works.
+    let mut http_transport = if wants_http() {
+        match start_http(&configuration, &token, &tool_context).await {
+            Ok(transport) => Some(transport),
+            Err(()) => return EXIT_FAILURE,
+        }
+    } else {
+        None
+    };
+    // Set once the accept loop has ended. Without it the branch would poll a finished
+    // `JoinHandle` again on the next turn of the loop, which panics.
+    let mut http_ended = false;
 
     loop {
         tokio::select! {
@@ -152,6 +176,21 @@ async fn run() -> i32 {
                 log::log_line(&format!("{signal}, shutting down"));
                 return EXIT_OK;
             }
+            // `/mcp` stopped accepting. The extension listener ends the process the same
+            // way when it fails, and for the same reason: a bridge that answers one
+            // surface and not the other looks healthy in `systemctl status` while half of
+            // it is dead. The `http_ended` flag keeps the branch from polling a finished
+            // `JoinHandle` a second time; the guard's future is still built, so it must
+            // not do anything until it is polled — that is what `join_transport` is for.
+            http_result = join_transport(http_transport.as_mut()), if !http_ended => {
+                http_ended = true;
+                match http_result {
+                    // A clean end means somebody closed the transport, which `main` never
+                    // does; the extension listener keeps serving.
+                    Ok(()) => {}
+                    Err(_error) => return EXIT_FAILURE,
+                }
+            }
             // stdin ended. Whether that is a goodbye depends on what stdin *is*: a pipe or
             // a socketpair belongs to a client, `/dev/null` belongs to systemd — and a
             // service that ended on `/dev/null`'s EOF would restart in a loop.
@@ -170,6 +209,83 @@ async fn run() -> i32 {
                     Err(error) => log::log_line(&format!("mcp task failed: {error}")),
                 }
             }
+        }
+    }
+}
+
+/// Replaces the default panic report with one that writes nothing, once per process.
+///
+/// The `/mcp` transport answers a panic in the tool layer with `500`, `Connection: close`
+/// and the single line `http request failed, answering 500` (`http.rs`). The default hook
+/// would put a multi-line, timestamp-less `panicked at …` block on the same stderr stream
+/// next to that line. stderr is journald here, and every line the operability tooling reads
+/// has the `toISOString() …` shape `log::log_line` writes — a stack trace with no timestamp
+/// breaks that shape and adds a second, louder report for a failure that is already
+/// answered. The template's `.catch(() => …)` threw its error away in the same spirit, minus
+/// the trace. So the payload is dropped: the `500` and its one line are the trace.
+///
+/// Set in the binary and not in the library on purpose: a hook that hides panics belongs to
+/// the process that answers requests, not to the code `cargo test` measures. Under
+/// `cargo test` the default hook stays, and a bug in the library keeps failing the suite
+/// loudly instead of becoming a passing test with a silent `500`.
+fn silence_panic_reports() {
+    // Idempotent and cheap to call again, because the hook is process-wide state: a second
+    // install would replace the first and nobody could tell which one is live.
+    static INSTALL: std::sync::Once = std::sync::Once::new();
+    INSTALL.call_once(|| {
+        std::panic::set_hook(Box::new(|_payload| {}));
+    });
+}
+
+/// True when the stop request is `--http`.
+fn wants_http() -> bool {
+    std::env::args().any(|argument| argument == HTTP_FLAG)
+}
+
+/// Waits for the `/mcp` accept loop, and never resolves when the bridge was started without
+/// one.
+///
+/// `tokio::select!` builds every branch future even when its guard says no, so the absent
+/// case has to be a future that says nothing instead of an `expect` that panics. Written as
+/// a function because the `pending()` arm needs the return type spelled out once.
+async fn join_transport(transport: Option<&mut http::Transport>) -> std::io::Result<()> {
+    match transport {
+        Some(transport) => transport.joined().await,
+        None => std::future::pending().await,
+    }
+}
+
+/// Binds `/mcp` and logs the line `scripts/parity/expected/7-logs.txt` records.
+///
+/// `Err(())` is "the start is over": the bind failed and the owner line is already
+/// written. A half-alive bridge — the extension served, `/mcp` not — is what the
+/// template's `process.exit(1)` there is written against.
+async fn start_http(
+    configuration: &config::Config,
+    token: &str,
+    tool_context: &Arc<ToolContext>,
+) -> Result<http::Transport, ()> {
+    let address = log::format_address(http::DEFAULT_HOST, configuration.http_port);
+    let tool_set = Arc::new(http::ToolSet::new({
+        let tool_context = Arc::clone(tool_context);
+        move |text: String| {
+            let tool_context = Arc::clone(&tool_context);
+            async move { Ok(mcp::handle_message_text(&text, &tool_context).await) }
+        }
+    }));
+    let log_sink = Arc::new(|line: &str| log::log_line(line));
+
+    match http::start(configuration.http_port, token, tool_set, log_sink).await {
+        Ok(transport) => {
+            log::log_line(&format!(
+                "listening on {} for POST /mcp",
+                log::format_address(&transport.host, transport.port)
+            ));
+            Ok(transport)
+        }
+        Err(error) => {
+            log_bind_failure("http listener", &address, configuration.http_port, &error);
+            Err(())
         }
     }
 }

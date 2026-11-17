@@ -46,7 +46,7 @@ Neue Abhängigkeiten — und **die einzigen**:
 | `sha2` | Tokenvergleich wie heute: `timingSafeEqual(sha256(…))` in `bridge/hub.mjs` | MIT / Apache-2.0 |
 | `subtle` | konstantzeitiger Vergleich der beiden Hashes (`==` auf `[u8]` bricht beim ersten Unterschied ab — ein Regressionsschritt) | MIT |
 | `sha1` + `base64` | `Sec-WebSocket-Accept` | MIT / Apache-2.0 |
-| `hyper` (`server`, `http1`) + `hyper-util` (`tokio`, `server`) + `http-body-util` | `POST /mcp` (nur der MCP-Port) | MIT |
+| `hyper` (`server`, `http1`) + `hyper-util` (`tokio`) + `http-body-util` | `POST /mcp` (nur der MCP-Port); `hyper-util`s `server`-Feature ist wirkungslos (`= ["hyper/server"]`, schon direkt gesetzt) | MIT |
 | `windows-sys` (`cfg(windows)`; Features `Win32_NetworkManagement_IpHelper`, `Win32_Storage_FileSystem`, `Win32_System_Threading`, `Win32_Foundation`) | Portbesitzer, `GetFileType`, Prozessname | MIT / Apache-2.0 |
 
 **`preserve_order` ist entschieden, nicht geerbt:** es zieht `indexmap` (MIT/Apache-2.0)
@@ -130,7 +130,7 @@ Node-Suite nachgezogen.
 | `bridge-rs/tests/ws.rs` | 13 Fälle unter den Node-Namen (`acceptKey_withRfcSampleKey_*`, `encodeFrame_*`, `frameDecoder_*` (2), `upgradeSocket_*`, `websocket_*` (8)) + 30 `ws_`-Fälle, darunter `ws_onAnAnnouncedOversizedFrame_shouldCloseWith1009BeforeThePayloadArrives`, Ping zwischen zwei Fragmenten, Close-Frame mit einem Byte Payload, fehlende `Sec-WebSocket-Version`, ein Chunk mit vielen kleinen Frames | die Grenze feuert vor dem Puffern; Fragmentzustand überlebt Steuerframes; der Decoder bleibt linear |
 | `bridge-rs/tests/hub.rs` | 55 Fälle: 41 `hub_*` (Sitzung, Fristen, Close-Codes `1002`/`4401`/`4408`/`4409`, kein Geister-Timeout), 9 `debugBlockOf_*` (Whitelist, `<unlisted field>`, `length`, `lengthEach`), 2 `formatStatusLine_*`, 3 `verifyToken_*`; der `welcome`-Frame ist in `hub_afterWelcome_…` gepinnt (ein eigener Fall würde den Zähler 55 verschieben) | Sitzung, Fristen, Statuszeilen, `welcome` |
 | `bridge-rs/tests/mcp.rs` | `mcp_toolsListIsByteIdentical`, `failureTextFor_transcriptNeedsFocus_shouldUseTheExtensionMessage`, die Naht-Fälle (Zahl in 2d) und die Prozessfälle aus 2f | Werkzeuge, deutsche Sätze, stdio |
-| `bridge-rs/tests/http.rs` | 14 portierte (`startHttpTransport_*` aus `test/http-transport.test.js`) + 2 neue (`http_withTheSameAnswerAsStdio_shouldMatch`, `http_rejectsAnOversizedChunkedBody`) = **16** | Auth, Grenzen, Statuscodes |
+| `bridge-rs/tests/http.rs` | **15** = 14 portierte aus `test/http-transport.test.js` (`http_` + der Node-Name: `…withToolsListAndValidToken_shouldAnswer200…`, `…withoutToken_shouldAnswer401…`, `…withWrongToken…`, `…withBasicScheme…`, `…withGetOnMcpAndNoToken_shouldAnswer405…`, `…withUnknownPath_shouldAnswer404`, `…withOversizedContentLength_shouldAnswer413BeforeAnyBodyArrives`, `…withABodyOfOneByteOverTheRequestLimit_shouldAnswer413…`, `…withOversizedChunkedBody_shouldAnswer413BeforeTheBodyFinishes`, `…afterARejection_shouldStillAnswerTheNextRequest`, `…withNotification_shouldAnswer202…`, `…whenTheToolSetThrows_shouldAnswer500…`, `…onDefaultHost_shouldBindLoopbackOnly`, `…afterARejection_shouldCloseTheSocket…`) + 1 neue Naht (`http_withTheSameAnswerAsStdio_shouldMatch`) | Auth, Grenzen, Statuscodes, Naht zu stdio |
 | `bridge-rs/tests/bridge.rs` | `mcp_whenStdinEnds_shouldExitZeroAfterASingleShutdownLine`, `mcp_withAnIgnoredStdin_shouldKeepRunningAndListeningAfterTheEof` | stdin-Lebenszyklus |
 | **live (Betreiber)** | die echte Extension verbindet sich mit dem Binary | der Port ist kein Selbstgespräch |
 
@@ -313,16 +313,20 @@ cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unkno
 
 **Stufe 2e — `POST /mcp`**
 
-Dateien: `src/http.rs`, `tests/http.rs`, `Cargo.toml` (`hyper`,
-`http-body-util`). Reihenfolge Pfad → Methode → Token → Körper; `404`, `405` +
+Dateien: `src/http.rs`, `tests/http.rs`, `src/lib.rs` (ein `pub mod http;`),
+`src/main.rs` (der `--http`-Zweig und die zweite Logzeile, ohne die Vergleich 7
+nicht grün wird), `Cargo.toml` (`hyper` mit `server`/`http1`, `hyper-util` mit `tokio`,
+`http-body-util`), `Cargo.lock`, `bridge-rs/README.md`.
+Reihenfolge Pfad → Methode → Token → Körper; `404`, `405` +
 `Allow: POST`, `401` + `WWW-Authenticate`, `413` vor dem ersten Body-Byte und
 beim chunked-Körper, `200`, `null` ⇒ `202`; jede Ablehnung mit
 `Connection: close`; `MAX_BODY_BYTES = 1048576`.
 
 Proof:
 ```
-cargo test --manifest-path bridge-rs/Cargo.toml --test http 2>&1 | grep -cE '^test http_[A-Za-z0-9]+ \.\.\. ok'   # ⇒ 16 (14 portiert + 2 neu, s. Testlandkarte)
-cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check --only 7        # ⇒ 1/7
+cargo test --manifest-path bridge-rs/Cargo.toml --test http 2>&1 | grep -cE '^test http_[A-Za-z0-9_]+ \.\.\. ok'   # ⇒ 15 (14 portiert + 1 Naht, s. Testlandkarte)
+# `[A-Za-z0-9_]` — jeder Name trägt weitere Unterstriche.
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check --only 7        # ⇒ 1/1 wie erwartet (Exit 0)
 ```
 
 **Stufe 2f — Prozesstests, stdin, voller Paritätslauf**
@@ -566,6 +570,27 @@ Teil 2 geht erst weiter, wenn diese Runde abgearbeitet ist; gebaut wird nach
   `handle_hello_timeout` respektiert `authenticated`, der Peer wird im selben
   Lock wie der Auftrag gelesen, Kopfleser hat eine Frist und der 16-KiB-Deckel
   steht **vor** der Terminatorsuche. **134 Rust-Fälle.**
+- **Korrektur an Runde 1 (2026-11-17, Orchestrator):** die Zahl „16" war doppelt
+  gezählt — `http_rejectsAnOversizedChunkedBody` ist der Node-Fall
+  `withOversizedChunkedBody`, es gibt also **14 portierte + 1 Naht = 15**
+  (`http_withTheSameAnswerAsStdio_shouldMatch`). Ebenso fehlte `src/main.rs` in
+  der Dateiliste von 2e, obwohl die Stufe ohne die zweite Logzeile Vergleich 7
+  nicht grün bekommt, und beide Proof-Zeilen zählten mit `[A-Za-z0-9]` statt
+  `[A-Za-z0-9_]` (jeder Node-Name trägt weitere Unterstriche). Die
+  Runde-1-Zeile bleibt als Protokoll stehen, wie sie war.
+- **Stufe 2e gebaut (2026-11-17):** `POST /mcp` mit `hyper`/`hyper-util`/
+  `http-body-util`; Reihenfolge Pfad → Methode → Token → Körper, `413` vor dem
+  ersten Körperbyte, `Connection: close` an jeder Ablehnung, `202` für
+  Notifications, `500` bei einem Panic in der Werkzeugschicht. **Der Maßstab
+  steht: `parity --impl rust --check` ⇒ 7/7, Exit 0.** 276 Rust-Fälle, davon 22
+  in `tests/http.rs` (14 portiert + 1 Naht + 7 aus der Review-Runde).
+  Drei Abweichungen, die erst die Messung zeigte: `hyper` löscht
+  `Content-Length` aus der Kopf-Map, sobald danach `Transfer-Encoding` kommt
+  (deshalb ein passiver `HeadTap` auf dem Rohkopf — eine Map-Prüfung hätte nur
+  eine Header-Reihenfolge abgedeckt); ein Panic wird jetzt zu `500` **ohne**
+  mehrzeiligen Panic-Block auf stderr (Hook im Startpfad, die Vorlage schluckt
+  den Fehler ebenfalls); ein abgebrochener Körper beantwortet **nichts** wie die
+  Vorlage, nicht `400`. Kopf-Frist 60 s wie Nodes `headersTimeout`.
 - **Stufe 2d gebaut (2026-11-17):** Werkzeugschicht und stdio. Die Werkzeugliste
   ist **byte-identisch** (`parity --only 1,2,3` ⇒ 3/3; `tools/list` 7.390 Byte
   wie die Vorlage), 218 von 218 Antworten über 13 Werkzeuge × 15 Argumentformen

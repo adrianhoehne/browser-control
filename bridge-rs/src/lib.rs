@@ -8,6 +8,7 @@
 
 pub mod config;
 pub mod head;
+pub mod http;
 pub mod hub;
 pub mod link;
 pub mod log;
