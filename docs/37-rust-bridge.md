@@ -152,7 +152,10 @@ Richtigkeit.
 7. **Die 764 Node-Tests laufen weiter.** Beweis: `npm test` ⇒ `# fail 0`,
    `# cancelled 0`, `# skipped 0`; `npm run check` ⇒ 0.
 8. **Kein Geheimnis.** Beweis:
-   `git grep --untracked -nE '[0-9a-f]{32,}' -- .` ⇒ keine Ausgabe, Exit 1.
+   `git grep --untracked -nE '[0-9a-f]{32,}' -- . ':(exclude)bridge-rs/Cargo.lock'` ⇒ keine Ausgabe, Exit 1,
+   und `git grep -nE '[0-9a-f]{32,}' -- bridge-rs/Cargo.lock | grep -v 'checksum = "'` ⇒ keine
+   Ausgabe, Exit 1 (zweistufig: die Lock-Datei trägt 64-stellige Crate-Prüfsummen,
+   eine Pauschalausnahme machte genau sie blind)
 
 ## Dev plan
 

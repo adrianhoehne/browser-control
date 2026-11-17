@@ -9,4 +9,27 @@ publish = false
 name = "browser-control-bridge"
 path = "src/main.rs"
 
+# The modules are a library as well, so the integration tests under `tests/` can
+# measure them in-process — exactly as `test/*.test.js` measured `bridge/*.mjs`.
+# `main.rs` stays the thin start path on top of it.
+[lib]
+name = "browser_control_bridge"
+path = "src/lib.rs"
+
 [dependencies]
+# `docs/38`, `## Dependency changes` names these features; nothing is added here
+# without a line in that table. 2a uses `rt-multi-thread`/`macros` for the async
+# entry point, `net` for the listener and `signal` for the shutdown contract; the
+# rest arrive with the stages that need them (2c `sync`/`time`, 2d `io-util`/
+# `io-std`, 2f `process`) and are declared once so the lock file stops churning.
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "net",
+  "time",
+  "signal",
+  "sync",
+  "io-util",
+  "io-std",
+  "process",
+  "macros",
+] }

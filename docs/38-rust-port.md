@@ -124,6 +124,9 @@ Node-Suite nachgezogen.
 | Datei | Fall | Was er beweist |
 |---|---|---|
 | `bridge-rs/tests/protocol.rs` | `protocol_constants_matchTheExtension` | dieselben Konstanten wie `extension/protocol.js` |
+| `bridge-rs/tests/config.rs` | `loadConfig_withoutHttpPortEnv_shouldDefaultTo8111`, `loadConfig_withHttpPortEnv_shouldUseThatPort`, `loadConfig_withGarbageHttpPort_shouldFallBackToTheDefault`, dazu `parseBind` (`:0`, `[::1]`, leerer Host) und die Timeout-Fälle (`BC_HELLO_TIMEOUT_MS`, `BC_CALL_TIMEOUT_MS`) | Config, die stille Lüge `:0 ⇒ 8110`, JS-`Number()`-Arithmetik |
+| `bridge-rs/tests/platform.rs` | `findPortOwner_withOwnListeningSocket_shouldNameThisProcess`, `findPortOwner_withReleasedPort_shouldReturnNull` | die `/proc`-Auswertung (Linux-only) |
+| `bridge-rs/tests/ports.rs` | `everyNumber…Range`, `twoEntriesOnOneNumber`, `everyEntry…ExtensionPort` | die Porttabelle aus `tests/common/mod.rs` gegen sich selbst |
 | `bridge-rs/tests/ws.rs` | `ws_onAnAnnouncedOversizedFrame_shouldCloseWith1009BeforeThePayloadArrives` | die Grenze feuert vor dem Puffern |
 | `bridge-rs/tests/hub.rs` | 55 Fälle: die 14 reinen (`formatStatusLine_*`, `debugBlockOf_*`, `verifyToken_*`), 41 Sitzungsfälle (`hub_*`) und neu `hub_welcomeFrame_shouldCarryTheBridgeVersionAndTheProtocol` | Sitzung, Fristen, Statuszeilen, `welcome` |
 | `bridge-rs/tests/mcp.rs` | `mcp_toolsListIsByteIdentical`, `failureTextFor_transcriptNeedsFocus_shouldUseTheExtensionMessage`, die Naht-Fälle (Zahl in 2d) und die Prozessfälle aus 2f | Werkzeuge, deutsche Sätze, stdio |
@@ -180,11 +183,16 @@ Node-Suite nachgezogen.
    Zahl `# tests N` gegen die gelöschten 10 Dateien (234 Fälle) geprüft und im
    `## Log` eingetragen — `# fail 0` allein bliebe auch grün, wenn die halbe
    Suite verschwände. `npm run check` ⇒ 0.
-9. **Kein Produktcode außerhalb der Grenze.** Beweis: `git status --porcelain`
-   nennt je Stufe nur die dort erlaubten Dateien (siehe `## Dev plan`);
+9. **Kein Produktcode außerhalb der Grenze.** Beweis: `git status --porcelain
+   -uall` nennt je Stufe nur die dort erlaubten Dateien (siehe `## Dev plan`) —
+   **`-uall`**, weil `git status` unversionierte Verzeichnisse sonst zu einer
+   Zeile faltet und fünf der elf neuen Dateien unsichtbar blieben;
    `git diff HEAD -- extension/` ⇒ leer.
 10. **Kein Geheimnis.** Beweis:
-    `git grep --untracked -nE '[0-9a-f]{32,}' -- .` ⇒ keine Ausgabe, Exit 1.
+    `git grep --untracked -nE '[0-9a-f]{32,}' -- . ':(exclude)bridge-rs/Cargo.lock'` ⇒ keine Ausgabe, Exit 1,
+    und `git grep -nE '[0-9a-f]{32,}' -- bridge-rs/Cargo.lock | grep -v 'checksum = "'` ⇒ keine
+    Ausgabe, Exit 1 (zweistufig: die Lock-Datei trägt 64-stellige Crate-Prüfsummen,
+    eine Pauschalausnahme machte genau sie blind)
 
 ## Dev plan
 
@@ -196,10 +204,16 @@ das Binary der *letzten* Stufe, und ein zurückgedrehter Fix bliebe grün.
 
 **Stufe 2a — `protocol`, `config`, `log`, `platform/linux`, Startverhalten**
 
-Dateien: `src/{protocol,config,log}.rs`, `src/platform/{mod,linux}.rs`,
-`src/main.rs` (Token ⇒ `2`; binden ⇒ `1` + Besitzerzeile; `listening on … log=…`;
-SIGTERM ⇒ `received SIGTERM, shutting down` + `0`), `tests/{protocol,config,platform}.rs`,
-`tests/common/mod.rs`, `tests/ports.rs`, `Cargo.toml` (tokio), `Cargo.lock`.
+Dateien: `src/lib.rs` (vier `pub mod`, keine Logik — ohne Lib-Target kann kein
+Integrationstest unter `tests/` die Module importieren; die Node-Suite hat die
+Module ebenfalls importiert), `src/{protocol,config,log}.rs`,
+`src/platform/{mod,linux}.rs`, `src/main.rs` (Token ⇒ `2`; binden ⇒ `1` +
+Besitzerzeile; `listening on … log=…`; SIGTERM ⇒ `received SIGTERM, shutting
+down` + `0`), `tests/{protocol,config,platform}.rs`, `tests/common/mod.rs`,
+`tests/ports.rs`, `Cargo.toml` (tokio, dazu `[lib]` mit `name`/`path`),
+`Cargo.lock`, und **`bridge-rs/README.md`** (drei Sätze stimmen nach dieser Stufe
+nicht mehr: „does nothing yet", „No dependencies", „empty `[dependencies]`
+table").
 
 Mitzuportieren, weil es Verhalten ist: **`log_line` bildet `toISOString()`
 exakt nach** (immer drei Millisekunden, `Z`) — die Maskierung des Maßstabs
@@ -212,8 +226,14 @@ Token ≥ 32 Hex, getrimmt, `ENOENT` ⇒ `2`, sonst `bridge failed: …` + `1`;
 
 Proof:
 ```
-cargo test --manifest-path bridge-rs/Cargo.toml --test protocol --test config --test platform
-cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check --only 5,6      # ⇒ 2/7
+cargo test --manifest-path bridge-rs/Cargo.toml --lib --test protocol --test config --test platform --test ports
+# `--lib` fährt die 13 Unit-Tests (u. a. `iso_timestamp` mit drei Millisekunden —
+# die Begründung dieser Stufe), `--test ports` die Porttabelle. Beides fehlt,
+# wenn man nur die drei Integrationstests nennt.
+cargo build --release --manifest-path bridge-rs/Cargo.toml --target x86_64-unknown-linux-musl && bash scripts/parity.sh --impl rust --check --only 5,6      # ⇒ 2/2 wie erwartet (Exit 0)
+# `--only` zählt nur die gewählten Vergleiche. Der volle Lauf zeigt den Abstand:
+# `bash scripts/parity.sh --impl rust --check` ⇒ `2/7 wie erwartet`, Exit 1 —
+# Vergleiche 1–4 und 7 brauchen 2b–2e.
 ```
 
 **Stufe 2b — `ws`: Handshake, Codec, Close**
@@ -476,6 +496,21 @@ Teil 2 geht erst weiter, wenn diese Runde abgearbeitet ist; gebaut wird nach
   x86_64.
 - **2026-11-16, Teilung:** nach dem dritten Block in „Maßstab" (`docs/37`) und
   „Port" (dieser Teil) getrennt.
+- **Secret-Grep ausgenommen (2026-11-17):** `bridge-rs/Cargo.lock` enthält mit
+  der ersten Abhängigkeit 16 Zeilen à 64 Hex-Zeichen (Crate-Prüfsummen). Der
+  Grep läuft jetzt zweistufig — Repo ohne die Lock-Datei, und die Lock-Datei
+  ohne `checksum = "…"`-Zeilen —, damit die Datei nicht pauschal blind wird.
+- **Stufe 2a, Review-Runde (2026-11-17):** `error_code` liegt in `log.rs` und
+  bildet `ErrorKind` auf `EADDRINUSE`/`EACCES`/`EADDRNOTAVAIL` ab, mit Unit-Test
+  gegen `expected/5-port-busy.txt`; `token_path` liest nur noch das übergebene
+  Env (Passwd-Rückfall bewusst aufgegeben); `read_token`s Fehlerzweig hat einen
+  Fall (Verzeichnis ⇒ `Err`); `parse_timeout` hat die Fälle `1e3`/`0.5`, und der
+  Kommentar behauptet kein `Number(raw)` mehr; `protocol_constants!` erzeugt
+  Konstanten und Vergleichstabelle aus einer Quelle; `bridge-rs/README.md`
+  beschreibt den Stand nach 2a. **29 Rust-Fälle** (18 Unit + 11 Integration).
+- **Stufe 2a gebaut (2026-11-17) — Abhängigkeit:** `tokio 1.54.1` (Lock-Angabe;
+  `Cargo.toml` schreibt `"1"`), 16 Pakete, ausschließlich tokios transitiver
+  Graph — kein `serde`, `sha2`, `base64` vorweg.
 - **Runde 1 dieses Dokuments (2026-11-16) — Neun Blocker übernommen:**
   Release-Build vor jedem `--impl rust`-Lauf (B1); `sha2` + `subtle` für den
   Tokenvergleich (B2); `hyper-util` und hyper-Features (B3); die 16 in

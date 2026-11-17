@@ -51,7 +51,8 @@ The same value goes into the extension's options page later (section 4) — neve
 into a URL, never into the repo. Check:
 
 ```bash
-git grep --untracked -nE '[0-9a-f]{32,}' -- .   # no output, exit 1
+git grep --untracked -nE '[0-9a-f]{32,}' -- . ':(exclude)bridge-rs/Cargo.lock'   # no output, exit 1
+git grep -nE '[0-9a-f]{32,}' -- bridge-rs/Cargo.lock | grep -v 'checksum = "'   # no output, exit 1
 ```
 
 ### Rotating the token

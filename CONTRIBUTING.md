@@ -73,7 +73,13 @@ These commands must be green before every commit:
 ```bash
 npm test; echo $?                    # 0, contains "^# fail 0" and "^# cancelled 0"
 npm run check; echo $?               # 0
-git grep --untracked -nE '[0-9a-f]{32,}' -- .   # no output, exit 1
+git grep --untracked -nE '[0-9a-f]{32,}' -- . ':(exclude)bridge-rs/Cargo.lock'   # no output, exit 1
+git grep -nE '[0-9a-f]{32,}' -- bridge-rs/Cargo.lock | grep -v 'checksum = "'   # no output, exit 1
+# Two commands, one reason: Cargo.lock carries 64-character crate checksums, and a
+# blanket exclusion would make the one file where a pasted token hides invisible.
+# The first command covers the repository, the second covers the only file we
+# exclude from it — minus the lines that are structurally checksums.
+
 ```
 
 Plus the criteria of the spec at hand. Where a criterion can only be decided in
