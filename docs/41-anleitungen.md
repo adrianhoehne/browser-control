@@ -57,10 +57,11 @@ Die Schritte, in dieser Reihenfolge:
 8. Speichern.
 9. Die Erweiterung in `about:debugging` einmal neu laden.
 
-**Die Warnung steht am Anfang, nicht am Ende:** als Schritt 2, direkt vor dem
+**Die Warnung steht als Kasten zwischen Schritt 1 und 2**, direkt vor dem
 Laden — „The extension is temporary. After a Firefox restart it is gone. Repeat
-steps 3 to 9. The endpoint and the token stay saved." Wer sie erst nach dem
-letzten Schritt liest, hat sie zu spät gelesen.
+steps 3 to 9. The endpoint and the token stay saved." Sie ist **kein**
+numerierter Schritt: sonst verschöben sich alle Nummern und der Verweis „repeat
+steps 3 to 9" zeigte auf die falschen Schritte.
 
 Ein Schlusssatz: dass im Startfenster `endpoint:` und `http:` stehen und welche
 Adresse wofür gilt (Extension bekommt `ws://…:8110`, der MCP-Client
@@ -111,8 +112,8 @@ fehlender Schritt auffällt:
 
 | Datei | Fall | Was er beweist |
 |---|---|---|
-| `test/bundle/bundle.test.js` | `guides_shouldStartAtStepOne` | beide Dateien beginnen mit `1.` und haben mindestens fünf numerierte Schritte |
-| `test/bundle/bundle.test.js` | `guides_shouldNameThePrintedLines` | `CLIENTS.md` enthält die drei Zeilen, die `start.sh` druckt, in derselben Form (`endpoint: `, `http: `, `token: `) |
+| `test/bundle/bundle.test.js` | `guides_shouldBeNumberedFromOne` | beide Dateien beginnen mit `1.` und haben je Datei die in Kriterium 1 geforderte Mindestzahl numerierter Schritte |
+| `test/bundle/bundle.test.js` | `guides_shouldNameThePrintedLines` | die zwei **Werte** aus `deploy/portable/start.sh` (Endpunkt `ws://` und `/mcp`-URL) stehen wörtlich in den Anleitungen — nicht nur das Etikett `http: ` |
 
 ## Acceptance criteria
 
@@ -137,9 +138,11 @@ fehlender Schritt auffällt:
 5. **Das Zip enthält sie.** `unzip -Z1
    dist/browser-control-<version>-linux-x86_64.zip | grep -cE
    '/(FIREFOX|CLIENTS)\.md$'` ⇒ **2**.
-6. **Kein Stil-Lint im Baum.** `grep -rl 'ste-lint' package.json scripts test
-   .github 2>/dev/null; echo $?` ⇒ **1** (die Specs selbst nennen das Wort, weil
-   sie die Entscheidung dokumentieren — sie zählen nicht).
+6. **Kein Stil-Lint im Baum.** `grep -rl 'ste-lint' package.json scripts
+   .github 2>/dev/null; echo $?` ⇒ **1**. `test/` ist bewusst **nicht** in der
+   Liste: `test/ci/workflow.test.js` muss das Wort als Suchmuster tragen
+   (`docs/40`), und `docs/` nennt es, weil die Specs die Entscheidung
+   dokumentieren.
 
 ## Dev plan
 

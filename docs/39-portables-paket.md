@@ -146,13 +146,18 @@ schlimmer); fehlen `zip`/`unzip`, skippen die zwei Zip-Fälle wie in
    '^-rwxr-xr-x.*browser-control-bridge$'` ⇒ **1**, und für `start.sh` ⇒ **1**.
 3. **Kein Geheimnis im Zip.** `unzip -Z1 … | grep -cE '(^|/)data/'` ⇒ 0 und
    `unzip -p … start.sh | grep -acE '[0-9a-f]{32,}'` ⇒ 0.
+**Kriterien 4, 5 und 7 beobachten denselben Lauf.** Vor dem Start `mkdir -p
+"$SANDBOX/home"` und `touch "$SANDBOX/marker"`; gestartet wird in Kriterium 4,
+`kill $PID` steht am Ende von Kriterium 7. Kriterium 6 ist der zweite Start im
+selben Ordner (mit `kill` davor). `run.log` liegt fest in `$SANDBOX/run.log`.
+
 4. **Es läuft ohne Installation.** In einem temporären Ordner entpackt, mit
    **freien Ports außerhalb der reservierten Bereiche** — 8110/8111 gehören dem
    Dienst, 18110–18119 den Test-Suiten (`bridge-rs/tests/common/mod.rs`):
    `BC_BIND=127.0.0.1:18130 BC_HTTP_PORT=18131 ./start.sh > run.log 2>&1 &
    PID=$!` (stdout und stderr zusammen, weil das Skript die drei Zeilen auf
-   stdout druckt und die Bridge auf stderr loggt — `run.log` also **außerhalb
-   des Baums** oder nach dem Lauf gelöscht, es enthält das lebende Token); auf die Zeile warten statt
+   stdout druckt und die Bridge auf stderr loggt — es enthält das lebende Token
+   und liegt deshalb **außerhalb des Baums**); auf die Zeile warten statt
    schlafen: `timeout 20 sh -c 'until grep -q "listening on 127.0.0.1:18130"
    run.log; do sleep 0.2; done'; echo $?` ⇒ **0**; dann enthält `run.log`
    (Teilstring, mit Zeitstempel davor) `listening on 127.0.0.1:18130 log=info`
@@ -164,18 +169,19 @@ schlimmer); fehlen `zip`/`unzip`, skippen die zwei Zip-Fälle wie in
    http://127.0.0.1:18131/mcp` = `200`. **Beenden: `kill $PID`** — niemals
    `pkill -f`, das trifft den Dienst (`CONTRIBUTING.md`).
 5. **Nichts außerhalb des Ordners.** Nach `$SANDBOX` entpackt, startet der Lauf mit
-   `HOME="$SANDBOX/home"`. Vorher `touch "$SANDBOX/marker"`, nachher
+   `HOME="$SANDBOX/home"`; der Ordner wird **vor** dem Marker angelegt. Nachher
    `find "$SANDBOX" -newer "$SANDBOX/marker" -not -path "$SANDBOX/browser-control-*"
-   -not -name 'run.log' -print` ⇒ **leer** — was das Skript in seinem eigenen
-   Ordner anlegt, ist erlaubt. Zusätzlich ist die Prüfsumme der echten
-   `~/.config/browser-control/token` vor und nach dem Lauf gleich
-   (`sha256sum` auf beiden Seiten vergleichen). Schreibvorgänge in `/tmp` und
+   -not -name 'run.log' -not -path "$SANDBOX/home*" -print` ⇒ **leer** — was das
+   Skript in seinem eigenen Ordner und in `HOME` anlegt, ist erlaubt. Zusätzlich
+   ist die Prüfsumme der echten `~/.config/browser-control/token` vor und nach
+   dem Lauf gleich (`sha256sum` beidseitig) — **falls die Datei existiert**;
+   fehlt sie (CI-Runner), entfällt der Vergleich und das wird im Lauf notiert. Schreibvorgänge in `/tmp` und
    `XDG_*` sind nicht Vertragsgegenstand.
-6. **Das Token überlebt.** Vorher `kill $PID` aus Kriterium 4 (sonst ist der
-   Port belegt). Kopie von `<ordner>/data/token` sichern, zweiter Start ⇒
+6. **Das Token überlebt.** Vorher `kill $PID` aus dem ersten Lauf. Kopie von `<ordner>/data/token` sichern, zweiter Start ⇒
    `cmp <kopie> <ordner>/data/token` ⇒ **identisch** (das entscheidet die
    Gleichheit; `grep -c '^token: '` sagt nur, dass die Zeile existiert) und
-   `stat -c %a <ordner>/data/token` ⇒ `600`.
+   `stat -c %a <ordner>/data/token` ⇒ `600`. Danach `kill $PID` (Ende von
+   Kriterium 7) — danach läuft kein Prozess aus diesem Test mehr.
 7. **Die drei gedruckten Zeilen stimmen mit den Ports.** `grep -c
    '^endpoint: ws://127.0.0.1:18130$' run.log` ⇒ **1**, `grep -c
    '^http: http://127.0.0.1:18131/mcp$' run.log` ⇒ **1**, `grep -cE '^token:
@@ -219,8 +225,12 @@ Beweis: `bash scripts/bundle.sh` ⇒ zwei Zips; `unzip -Z1 <zip> | wc -l` ⇒ 7 
 Zip; `bash -n deploy/portable/start.sh` ⇒ 0.
 
 **Kein Schritt für die Anleitungen.** Ihr Text und ihre Prüfung sind
-`docs/41-anleitungen.md` (geteilt am 2026-11-17); diese Spec nimmt die fertigen
-Dateien nur ins Zip. Reihenfolge: `docs/41` vor `docs/39`, Stufe 3.
+`docs/41-anleitungen.md` (geteilt am 2026-11-17). Diese Spec nimmt die fertigen
+Dateien nur ins Zip.
+
+**Reihenfolge über beide Specs:** `docs/41` Stufe 1–2 (die zwei Texte) →
+`docs/39` Stufe 1 (`bundle.sh` kopiert sie) → `docs/41` Stufe 3 (Struktur-Tests
+gegen das Zip) → `docs/39` Stufe 3 (Zip-Tests) → `docs/39` Stufe 4 (Doku).
 
 **Stufe 3 — Tests**
 
@@ -265,7 +275,7 @@ entschieden.
 
 ## Review
 
-### Runde 1 — 2026-11-17, `grizzled-senior-dev`: 🔧, Blocker dabei
+### Runden 1–3 (alter Zuschnitt) — 2026-11-17, `grizzled-senior-dev`: 🔧
 
 Acht Blocker: zwei Inkremente in einer Spec (Zip **und** CI); die Bundle-Tests
 hätten `npm test` an ein gebautes Binary gebunden; `data/` stand gleichzeitig im
@@ -295,7 +305,14 @@ Anleitungen sind `docs/41-anleitungen.md`, der CI-Ablauf `docs/40-ci-ablauf.md`.
 Diese Datei beschreibt seither nur das Zip; die Rundenzählung beginnt mit dem
 neuen Zuschnitt neu.
 
-### Runde 4 (neuer Zuschnitt) — steht aus
+### Runde 1 (neuer Zuschnitt) — 2026-11-17, `grizzled-senior-dev`: 🔧
+
+Sechs Einzeiler: `$SANDBOX/home` fehlte im `find`-Ausschluss; die Kriterien
+sagten nicht, wer wann startet und killt; `run.log` hatte zwei Orte; die
+Prüfsumme verlangte eine Datei, die es auf CI nicht gibt; die Reihenfolge zu
+`docs/41` war nicht entscheidbar; die Rundenzählung widersprach sich.
+
+### Runde 2 (neuer Zuschnitt) — steht aus
 
 ## Log
 

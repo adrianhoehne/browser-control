@@ -77,7 +77,10 @@ PING 2026-11-17T15:15:48.205Z                     (die Seite selbst, 4 s später
 2. **Token erzeugen** (32 Bytes Zufall, 64 Hex) in eine Datei; `BC_TOKEN_FILE`
    darauf zeigen. `E2E_TOKEN_FILE` benennt sie.
 3. **Test-Kopie der Erweiterung bauen** (Verzeichnis, **kein Zip**): `extension/`
-   kopieren, dann **zwei Ersetzungen** in der Kopie, beide mit gezähltem Anker
+   kopieren, dann **zwei Ersetzungen** in `<kopie>/background.js` — gepatcht und
+   gezählt wird **nur diese Datei**; `options.js` trägt denselben
+   Endpunkt-Anker und würde jede Zählung über den ganzen Ordner zur Lüge
+   machen — beide mit gezähltem Anker
    (`grep -Fc` ⇒ genau **1**, sonst `seam moved` und Exit 1 — `grep -F`, weil
    der zweite Anker `[` und `]` enthält und als BRE nie träfe):
 
@@ -148,7 +151,7 @@ Bereiche — 8110/8111 gehören dem laufenden Dienst, 18110–18119 den Test-Sui
 |---|---|---|
 | `test` | `ubuntu-latest`, Matrix 22/24 | **unverändert**: checkout, setup-node, `npm run check`, `npm test` — ohne Rust |
 | `unit` | `ubuntu-latest` | checkout, Node (für `parity.sh`), rustup (stable, Ziele `x86_64-unknown-linux-musl` + `x86_64-pc-windows-gnu`, Teil `clippy`), `gcc-mingw-w64-x86-64`; `npm run check`, `npm test`, `npm run test:ci`; `cargo build --release` (beide Ziele), `cargo test -- --test-threads=1`, `clippy -D warnings --all-targets` (beide Ziele), `parity.sh --impl rust --check`, `parity.sh --self-test`; `upload-artifact` `bridge-linux` und `bridge-windows` |
-| `e2e` | `windows-latest`, braucht `unit` | checkout, Node, `download-artifact` `bridge-windows` **nach** `bridge-rs/target/x86_64-pc-windows-gnu/release/`, `node scripts/e2e/run.mjs` |
+| `e2e` | `windows-latest`, braucht `unit` | checkout, Node, `download-artifact` `bridge-windows` **nach** `bridge-rs/target/x86_64-pc-windows-gnu/release/`, `env: E2E_BINARY: bridge-rs/target/x86_64-pc-windows-gnu/release/browser-control-bridge.exe`, `node scripts/e2e/run.mjs` |
 | `bundle` | `ubuntu-latest`, braucht `unit` | checkout, Node, `download-artifact` **beide** (`bridge-linux` → `bridge-rs/target/x86_64-unknown-linux-musl/release/`, `bridge-windows` → `bridge-rs/target/x86_64-pc-windows-gnu/release/`), `scripts/bundle.sh`, `npm run test:bundle`, `upload-artifact` `portable-zips` (beide Zips) |
 | `release` | **in `test.yml`**, nur Tag `v*`, braucht `bundle` | `download-artifact` `portable-zips` mit `path: dist`, `merge-multiple: true`; `permissions: contents: write`; `GH_TOKEN: ${{ github.token }}`; `gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --clobber` |
 
