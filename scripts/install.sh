@@ -9,10 +9,13 @@
 #
 # Rules this file keeps, and why:
 #
-# - Nothing is written outside `~/.config/browser-control/` and
-#   `~/.config/systemd/user/` (plus the parents `mkdir -p` creates). Every write
-#   goes through `guard_path()`, so "nothing outside" is a property of the code
-#   and not of good intentions.
+# - Nothing is written outside `~/.config/browser-control/`,
+#   `~/.config/systemd/user/` and `~/.local/bin/` (plus the parents `mkdir -p`
+#   creates). Every write goes through `guard_path()`, so "nothing outside" is a
+#   property of the code and not of good intentions.
+# - It builds nothing. The bridge is a statically linked binary built by `cargo`;
+#   this script copies the artefact of that build and starts the unit that runs it.
+#   A missing artefact is a preflight error — not a start that dies in the journal.
 # - An existing token is read and checked, never replaced. Rotation is the
 #   operator's decision (INSTALL.md, "Rotating the token").
 # - The token is printed exactly once, on stdout, and never handed to another
@@ -35,10 +38,15 @@ SYSTEMD_DIR=$HOME/.config/systemd
 UNIT_DIR=$SYSTEMD_DIR/user
 UNIT_FILE=$UNIT_DIR/browser-control.service
 UNIT_SOURCE=$REPO_ROOT/deploy/browser-control.service
-DROPIN_DIR=$UNIT_DIR/browser-control.service.d
-DROPIN_FILE=$DROPIN_DIR/path.conf
+BIN_DIR=$HOME/.local/bin
+BIN_FILE=$BIN_DIR/browser-control-bridge
 SERVICE_NAME=browser-control
 CLONE_DIR=$HOME/browser-control
+# Both this path and the clone check hang off $CLONE_DIR and not off the directory
+# this script happens to run from: the artefact and the unit belong to the clone
+# INSTALL.md §4 creates (see bridge-rs/README.md, "Building"). A second clone
+# elsewhere must fail loudly instead of installing a build nobody measured.
+BINARY_SOURCE=$CLONE_DIR/bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge
 EXTENSION_PORT=8110
 HTTP_PORT=8111
 
@@ -51,7 +59,6 @@ TOKEN_LENGTH_HINT=64
 
 WANT_HELP=0
 DRY_RUN=0
-FIX_PATH=0
 MODE=install
 
 say() {
@@ -81,32 +88,38 @@ install.sh — richtet die Server-Seite von browser-control ein.
 
 Aufruf: scripts/install.sh [OPTION]
 
-Ohne Option: Token anlegen oder prüfen, die systemd-User-Unit installieren, den
-Dienst aktivieren, starten und prüfen. Danach steht da, was in Firefox noch
-Handarbeit ist.
+Ohne Option: das gebaute Bridge-Binary nach ~/.local/bin kopieren, Token anlegen
+oder prüfen, die systemd-User-Unit installieren, den Dienst aktivieren, starten und
+prüfen. Danach steht da, was in Firefox noch Handarbeit ist.
+
+Voraussetzung: das Binary ist gebaut —
+cargo build --release --target x86_64-unknown-linux-musl in bridge-rs/
+(bridge-rs/README.md, "Building"). Node.js wird weder gebraucht noch geprüft.
 
 Optionen:
   (ohne)        installieren oder reparieren, dann prüfen und den Rest ansagen
   --dry-run     alles nur ansagen; nichts schreiben, nichts starten
   --print-token das vorhandene Token ausgeben und sonst nichts tun
-  --fix-path    die PATH-Drop-in-Datei schreiben, wenn node nicht in /usr/bin liegt
   --uninstall   den Dienst stoppen und deaktivieren, die Unit entfernen; das Token bleibt
   --help        diese Übersicht
 
 Exit-Codes:
   0  Erfolg
-  1  abgebrochen — Vorprüfung gescheitert, unbekannte Option, Dienst nach dem
-     Start nicht active, oder ein Schreibziel außerhalb der erlaubten Pfade
+  1  abgebrochen — Vorprüfung gescheitert (Binary nicht gebaut, belegter Port,
+     Klon nicht unter ~/browser-control, $HOME nicht beschreibbar), unbekannte
+     Option, Dienst nach dem Start nicht active, oder ein Schreibziel außerhalb
+     der erlaubten Pfade
   2  Token fehlt, ist nicht lesbar oder zu kurz
 
-Geschrieben wird nur unter ~/.config/browser-control/ und
-~/.config/systemd/user/ — kein systemweiter Dienst, kein systemweites Token.
-Ein vorhandenes Token wird nie überschrieben.
+Geschrieben wird nur unter ~/.config/browser-control/, ~/.config/systemd/user/
+und ~/.local/bin/ — kein systemweiter Dienst, kein systemweites Token. Ein
+vorhandenes Token wird nie überschrieben; ein vorhandenes Binary nur, wenn es
+sich vom gebauten unterscheidet.
 USAGE
 }
 
 usage_short() {
-  printf 'Aufruf: scripts/install.sh [--dry-run|--print-token|--fix-path|--uninstall|--help]\n' >&2
+  printf 'Aufruf: scripts/install.sh [--dry-run|--print-token|--uninstall|--help]\n' >&2
 }
 
 parse_args() {
@@ -117,7 +130,7 @@ parse_args() {
     case $arg in
       -h|--help) WANT_HELP=1 ;;
       --dry-run) DRY_RUN=1 ;;
-      --print-token|--uninstall|--fix-path) modes+=("${arg#--}") ;;
+      --print-token|--uninstall) modes+=("${arg#--}") ;;
       *)
         printf 'Unbekannte Option: %s\n' "$arg" >&2
         usage_short
@@ -135,15 +148,12 @@ parse_args() {
   fi
 
   MODE=${modes[0]:-install}
-  if [[ $MODE == fix-path ]]; then
-    MODE=install
-    FIX_PATH=1
-  fi
 }
 
 # The path guard is the whole write boundary. It refuses anything that is not one
-# of the two places from the spec or one of their parents — including a path that
-# tries to climb out with "..".
+# of the three places from the spec or one of their parents — including a path that
+# tries to climb out with "..". `$BIN_DIR` is `~/.local/bin` and nothing above it:
+# `~/.local/share` stays out even though it shares a parent.
 guard_path() {
   local target=$1
   local normalised=$target
@@ -157,14 +167,14 @@ guard_path() {
   done
 
   case $normalised in
-    "$TOKEN_DIR"|"$SYSTEMD_DIR"|"$UNIT_DIR") return 0 ;;
+    "$TOKEN_DIR"|"$SYSTEMD_DIR"|"$UNIT_DIR"|"$BIN_DIR") return 0 ;;
   esac
 
-  if [[ $normalised == "$TOKEN_DIR/"* || $normalised == "$UNIT_DIR/"* ]]; then
+  if [[ $normalised == "$TOKEN_DIR/"* || $normalised == "$UNIT_DIR/"* || $normalised == "$BIN_DIR/"* ]]; then
     return 0
   fi
 
-  die 1 "Schreibziel außerhalb der erlaubten Pfade: $target (erlaubt sind $TOKEN_DIR und $UNIT_DIR)"
+  die 1 "Schreibziel außerhalb der erlaubten Pfade: $target (erlaubt sind $TOKEN_DIR, $UNIT_DIR und $BIN_DIR)"
 }
 
 ensure_dir() {
@@ -199,52 +209,32 @@ remove_file() {
   fi
 }
 
-remove_dir_if_empty() {
-  local target=$1
-
-  guard_path "$target"
-  if [[ -d $target ]]; then
-    # A directory that still holds files must not abort the removal: `rmdir`
-    # refusing is the answer here, not an error.
-    rmdir -- "$target" 2>/dev/null || true
+# The service runs exactly one file, so that file has to exist before anything is
+# written. Building is deliberately not part of this script: `cargo build` takes
+# minutes and a fresh machine needs the toolchain first, so the operator runs it and
+# this check only names what is missing.
+check_binary() {
+  if [[ ! -e $BINARY_SOURCE ]]; then
+    die 1 "Das Bridge-Binary ist nicht gebaut: $BINARY_SOURCE fehlt. Zuerst 'cargo build --release --target x86_64-unknown-linux-musl' in bridge-rs/ laufen lassen (bridge-rs/README.md, Building)."
   fi
+
+  if [[ ! -f $BINARY_SOURCE || ! -x $BINARY_SOURCE ]]; then
+    die 1 "Das Bridge-Binary ist nicht ausführbar: $BINARY_SOURCE. Ein Artefakt ohne Ausführungsrecht wird nicht kopiert — der Dienst käme damit nicht über den Start hinaus."
+  fi
+
+  say "Bridge-Binary: $BINARY_SOURCE"
 }
 
-check_node_version() {
-  local version major
-
-  if ! command -v node >/dev/null 2>&1; then
-    die 1 "Node.js nicht gefunden (PATH=$PATH). Node.js 22 oder neuer wird gebraucht."
-  fi
-
-  # A failing `node -v` is turned into the same message as "too old" by the check
-  # below, so it must not abort the run here.
-  version=$(node -v 2>/dev/null || true)
-  major=${version#v}
-  major=${major%%.*}
-
-  if [[ ! $major =~ ^[0-9]+$ ]]; then
-    die 1 "Node.js meldet keine brauchbare Version ('$version'). Node.js 22 oder neuer wird gebraucht."
-  fi
-  if (( major < 22 )); then
-    die 1 "Node.js ist zu alt: $version. Node.js 22 oder neuer wird gebraucht."
-  fi
-
-  say "Node.js $version — in Ordnung."
-}
-
-# The unit names a fixed clone path (`%h/browser-control/bridge/bridge.mjs`), so a
-# clone somewhere else is a preflight error with both paths in the message — not a
-# silently broken service.
+# The artefact and the unit belong to the clone INSTALL.md §4 creates, so a clone
+# somewhere else is a preflight error with both paths in the message — not a service
+# that systemd reads and then loses.
 check_repo_path() {
-  local unit_target=$CLONE_DIR/bridge/bridge.mjs
-
   if [[ ! -r $UNIT_SOURCE ]]; then
     die 1 "Die Vorlage der systemd-Unit fehlt: $UNIT_SOURCE. Läuft das Skript aus einem vollständigen Klon?"
   fi
 
-  if [[ ! -r $unit_target ]]; then
-    die 1 "Der Klon liegt nicht unter $CLONE_DIR: die Unit startet $unit_target, dieses Skript läuft aber aus $REPO_ROOT (INSTALL.md §4 klont nach $CLONE_DIR)."
+  if [[ ! -d $CLONE_DIR ]]; then
+    die 1 "Der Klon liegt nicht unter $CLONE_DIR: dieses Skript läuft aus $REPO_ROOT, und Binary wie Unit werden in $CLONE_DIR erwartet (INSTALL.md §4 klont dorthin)."
   fi
 }
 
@@ -312,7 +302,7 @@ check_ports() {
     name=$(owner_name "$line")
 
     if [[ -z $pid ]]; then
-      die 1 "Port $port ist belegt, Besitzer nicht ermittelbar (ss -ltnp nannte keine PID). Nächster Schritt: 'ss -ltnp | grep :$port' zeigt die Zeile. Den Dienst beendet 'systemctl --user stop browser-control.service'; einen von Hand gestarteten Bridge beendet 'kill <pid>' mit der PID aus genau dieser Zeile — kein 'pkill -f bridge.mjs', das trifft auch den laufenden Dienst."
+      die 1 "Port $port ist belegt, Besitzer nicht ermittelbar (ss -ltnp nannte keine PID). Nächster Schritt: 'ss -ltnp | grep :$port' zeigt die Zeile. Den Dienst beendet 'systemctl --user stop browser-control.service'; einen von Hand gestarteten Bridge beendet 'kill <pid>' mit der PID aus genau dieser Zeile — kein 'pkill -f browser-control-bridge', das trifft auch den laufenden Dienst."
     fi
 
     own=$(own_service_pid)
@@ -327,8 +317,8 @@ check_ports() {
 
 run_preflight() {
   step "Vorprüfung"
-  check_node_version
   check_repo_path
+  check_binary
   check_home_writable
   check_ports
   say "Vorprüfung bestanden."
@@ -424,19 +414,19 @@ cmd_print_token() {
 cmd_install() {
   local value
 
-  step "1/4 Token"
+  step "1/5 Bridge-Binary"
+  install_binary
+
+  step "2/5 Token"
   ensure_token
 
-  step "2/4 systemd-Unit"
+  step "3/5 systemd-Unit"
   ensure_unit
-  if (( FIX_PATH )); then
-    ensure_dropin
-  fi
 
-  step "3/4 Dienst"
+  step "4/5 Dienst"
   start_service
 
-  step "4/4 Token und Endpunkt für Firefox"
+  step "5/5 Token und Endpunkt für Firefox"
   value=$(read_token_value)
   say "Endpunkt: ws://127.0.0.1:$EXTENSION_PORT"
   say "Token (erscheint hier genau einmal, jetzt einfügen): $value"
@@ -448,7 +438,29 @@ cmd_install() {
   say "4. Speichern und die Erweiterung in about:debugging einmal neu laden."
 }
 
-# The unit is copied byte for byte: it names a fixed clone path, and rewriting it
+# The binary is copied, never built and never moved: the unit starts
+# `%h/.local/bin/browser-control-bridge`, so that file is the whole product on this
+# machine. A second run is a no-op when bytes and execute bit already match —
+# `cmp -s` is what makes the rerun cheap and the modification time stable.
+install_binary() {
+  local staging=$BIN_FILE.new
+
+  ensure_dir "$BIN_DIR" 755
+
+  if [[ -f $BIN_FILE ]] && cmp -s -- "$BINARY_SOURCE" "$BIN_FILE" && [[ -x $BIN_FILE ]]; then
+    say "Bridge-Binary ist schon aktuell: $BIN_FILE"
+    return 0
+  fi
+
+  say "Bridge-Binary installieren: $BIN_FILE"
+  # Written beside the target and renamed into place. A running service keeps its
+  # old inode alive, and writing over the file it executes would meet ETXTBSY;
+  # the rename also means a half-copied file can never be what systemd starts.
+  put_file "$staging" 755 <"$BINARY_SOURCE"
+  mv -f -- "$staging" "$BIN_FILE"
+}
+
+# The unit is copied byte for byte: it names a fixed install path, and rewriting it
 # here would produce a second truth next to `deploy/`. `cmp -s` is what makes a
 # second run a no-op on an unchanged file — including its modification time.
 ensure_unit() {
@@ -501,7 +513,7 @@ main() {
   fi
 
   # Removing has to work after the clone moved, so it runs without any preflight:
-  # the node version and the clone path are irrelevant to stopping a unit.
+  # the binary and the clone path are irrelevant to stopping a unit.
   if [[ $MODE == uninstall ]]; then
     cmd_uninstall
     exit 0
@@ -532,6 +544,13 @@ cmd_dry_run() {
 dry_run_install() {
   step "Probelauf — geschrieben und gestartet wird nichts"
 
+  step "Bridge-Binary"
+  if [[ -f $BIN_FILE ]] && cmp -s -- "$BINARY_SOURCE" "$BIN_FILE" && [[ -x $BIN_FILE ]]; then
+    say "Bridge-Binary ist schon aktuell: $BIN_FILE"
+  else
+    say "Bridge-Binary würde installiert: $BIN_FILE (0755, aus $BINARY_SOURCE)."
+  fi
+
   step "Token"
   if [[ -f $TOKEN_FILE ]]; then
     say "Token bleibt: $TOKEN_FILE (Rechte $(stat -c '%a' "$TOKEN_FILE"))."
@@ -544,9 +563,6 @@ dry_run_install() {
     say "Systemd-Unit ist schon aktuell: $UNIT_FILE"
   else
     say "Systemd-Unit würde installiert: $UNIT_FILE"
-  fi
-  if (( FIX_PATH )); then
-    say "PATH-Drop-in würde geprüft und bei Bedarf geschrieben: $DROPIN_FILE"
   fi
 
   step "Dienst"
@@ -564,7 +580,8 @@ dry_run_uninstall() {
 
   step "Dienst und Unit entfernen"
   say "Dienst würde deaktiviert und gestoppt: systemctl --user disable --now $SERVICE_NAME"
-  say "Entfernt würde: $UNIT_FILE (und $DROPIN_FILE, falls vorhanden)."
+  say "Entfernt würde: $UNIT_FILE."
+  say "Das Binary bleibt liegen: $BIN_FILE."
   if [[ -f $TOKEN_FILE ]]; then
     say "Token bleibt: $TOKEN_FILE"
   else
@@ -599,8 +616,6 @@ cmd_uninstall() {
   systemctl --user disable --now "$SERVICE_NAME" || note "disable --now meldete einen Fehler — vermutlich lief der Dienst nicht; das Entfernen geht weiter."
 
   remove_file "$UNIT_FILE"
-  remove_file "$DROPIN_FILE"
-  remove_dir_if_empty "$DROPIN_DIR"
 
   # Claiming the token stays when no file exists would be a promise the operator
   # cannot check without looking — and looking is what this line is for.
@@ -609,39 +624,8 @@ cmd_uninstall() {
   else
     say "Kein Token vorhanden — nichts zu behalten."
   fi
+  say "Das Binary bleibt liegen: $BIN_FILE."
   say "Fertig. Die Erweiterung in Firefox wird von Hand entfernt (about:debugging)."
-}
-
-# Only in `--fix-path`, and only when it can help: a node inside /usr/bin is visible
-# to a user unit already, and a drop-in for that case would be noise in the answer to
-# "why does my PATH look like this?".
-ensure_dropin() {
-  local node_dir first
-  local content
-
-  node_dir=$(dirname -- "$(command -v node)")
-
-  if [[ $node_dir == /usr/bin ]]; then
-    say "node liegt in /usr/bin — kein PATH-Drop-in nötig."
-    return 0
-  fi
-
-  if [[ -d $HOME/.local/share/pi-node/current/bin ]]; then
-    first=%h/.local/share/pi-node/current/bin
-  else
-    first=$node_dir
-  fi
-
-  content=$(printf '[Service]\nEnvironment=PATH=%s:/usr/local/bin:/usr/bin:/bin\n' "$first")
-  ensure_dir "$DROPIN_DIR" 755
-
-  if [[ -f $DROPIN_FILE && "$(cat -- "$DROPIN_FILE")" == "$content" ]]; then
-    say "PATH-Drop-in ist schon aktuell: $DROPIN_FILE"
-    return 0
-  fi
-
-  say "PATH-Drop-in schreiben: $DROPIN_FILE (PATH-Eintrag $first)"
-  printf '%s\n' "$content" | put_file "$DROPIN_FILE" 644
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

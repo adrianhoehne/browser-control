@@ -24,7 +24,7 @@ const REQUIRED_LINES = [
   "[Service]",
   "[Install]",
   "Environment=BC_HTTP_PORT=8111",
-  "ExecStart=/usr/bin/env node %h/browser-control/bridge/bridge.mjs --http",
+  "ExecStart=%h/.local/bin/browser-control-bridge --http",
   "Restart=on-failure",
   "RestartSec=2",
   "RestartPreventExitStatus=2",
@@ -160,17 +160,17 @@ test("execStart_asTextCheck_shouldUseTheHomeSpecifierInsteadOfAnAbsoluteClonePat
   );
 
   // WHEN we read its single ExecStart,
-  // THEN the script path has to hang off `%h/browser-control/`, the documented
-  // clone location, and must not be an absolute path of some machine. The exact
-  // line is pinned by REQUIRED_LINES; here we only ask where the path starts:
+  // THEN the program has to hang off `%h/.local/bin/`, where `scripts/install.sh`
+  // copies the built artefact, and must not be an absolute path of some machine.
+  // The exact line is pinned by REQUIRED_LINES; here we only ask where it starts:
   assert.equal(execStartLines.length, 1, "unit needs exactly one ExecStart");
 
   assert.ok(
-    execStartLines[0].includes(" %h/browser-control/bridge/bridge.mjs"),
-    `ExecStart does not resolve the script from %h: ${execStartLines[0]}`,
+    execStartLines[0].startsWith("ExecStart=%h/.local/bin/browser-control-bridge "),
+    `ExecStart does not resolve the binary from %h/.local/bin: ${execStartLines[0]}`,
   );
   assert.ok(
     !execStartLines[0].includes(ABSOLUTE_HOME_PATH),
-    "ExecStart contains an absolute clone path",
+    "ExecStart contains an absolute install path",
   );
 });

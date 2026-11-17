@@ -1,14 +1,14 @@
 # User-Unit, kein System-Dienst: die Bridge spricht mit dem Firefox des
 # Betreibers, und der läuft in dessen Sitzung — nicht unter einem Systembenutzer.
 #
-# %h statt eines absoluten Pfades, weil INSTALL.md nach ~/browser-control klont.
+# %h statt eines absoluten Pfades, weil das Binary im Home des Betreibers liegt.
 # Die Unit kennt keinen Benutzernamen und muss kein Home raten.
 #
-# /usr/bin/env node statt eines fest verdrahteten Interpreterpfades: der wäre
-# geraten. Eine nvm-Installation ist für User-Units unsichtbar — der minimale
-# PATH kennt sie nicht, das Journal sagt dann "env: node: No such file". Wer kein
-# node im Unit-PATH hat, trägt den absoluten Pfad hier oder in Environment=PATH=
-# nach; INSTALL.md beschreibt den Handgriff, diese Datei rät ihn nicht.
+# ExecStart nennt das installierte Binary und keinen Interpreter: die Bridge ist
+# ein statisch gelinktes Rust-Programm und braucht weder eine Laufzeitumgebung
+# noch einen PATH-Eintrag, der sie findet. Wohin das Binary gehört, entscheidet
+# `scripts/install.sh` (nach `~/.local/bin`, 0755); wer den Dienst ohne Installer
+# aufsetzt, kopiert es selbst dorthin (bridge-rs/README.md, "Building").
 #
 # RestartPreventExitStatus=2: Exit 2 heißt "Tokendatei fehlt oder ist zu kurz".
 # Das heilt kein Neustart. Ohne diese Zeile liefe eine 2-Sekunden-Schleife, die
@@ -19,7 +19,7 @@ Description=Browser bridge that exposes the operator's own Firefox as an MCP ser
 
 [Service]
 Environment=BC_HTTP_PORT=8111
-ExecStart=/usr/bin/env node %h/browser-control/bridge/bridge.mjs --http
+ExecStart=%h/.local/bin/browser-control-bridge --http
 Restart=on-failure
 RestartSec=2
 RestartPreventExitStatus=2

@@ -31,7 +31,20 @@ const UNIT_SOURCE_PATH = path.join(REPOSITORY_ROOT, "deploy", "browser-control.s
 
 const TOKEN_RELATIVE_PATH = path.join(".config", "browser-control", "token");
 const UNIT_RELATIVE_PATH = path.join(".config", "systemd", "user", "browser-control.service");
-const DROPIN_RELATIVE_PATH = path.join(".config", "systemd", "user", "browser-control.service.d", "path.conf");
+const BINARY_RELATIVE_PATH = path.join(".local", "bin", "browser-control-bridge");
+
+/**
+ * Where the installer expects the built artefact: inside the clone at `$HOME/browser-control`,
+ * the same path `bridge-rs/README.md` documents under "Building".
+ */
+const CLONE_ARTEFACT_RELATIVE_PATH = path.join(
+  "browser-control",
+  "bridge-rs",
+  "target",
+  "x86_64-unknown-linux-musl",
+  "release",
+  "browser-control-bridge",
+);
 
 /** Directory names are allowed only where the spec's `mkdir -p` would create them. */
 const ALLOWED_EXACT_DIRECTORIES = new Set([
@@ -39,8 +52,10 @@ const ALLOWED_EXACT_DIRECTORIES = new Set([
   ".config/systemd",
   ".config/browser-control",
   ".config/systemd/user",
+  ".local",
+  ".local/bin",
 ]);
-const ALLOWED_PREFIXES = [".config/browser-control/", ".config/systemd/user/"];
+const ALLOWED_PREFIXES = [".config/browser-control/", ".config/systemd/user/", ".local/bin/"];
 
 /**
  * The stub for `systemctl`. It logs the call and answers by subcommand, so the
@@ -94,9 +109,9 @@ function writeStub(directory, name, body) {
 
 /**
  * A sandbox holding the temporary `HOME`, the stub directory and the stub log.
- * `home/browser-control/bridge/bridge.mjs` exists because the unit's fixed
- * `ExecStart` target has to be there — without it every run stops in the repo-path
- * preflight.
+ * `home/browser-control/` with a build artefact below it exists because that is what
+ * the installer copies from: the artefact has to be a real file with the execute bit,
+ * so it is written as a stand-in script — nothing in a test may need a `cargo` build.
  */
 function makeSandbox(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "bc-install-"));
@@ -104,8 +119,7 @@ function makeSandbox(t) {
   const stubs = path.join(root, "stubs");
   const logPath = path.join(root, "stub.log");
 
-  fs.mkdirSync(path.join(home, "browser-control", "bridge"), { recursive: true });
-  fs.writeFileSync(path.join(home, "browser-control", "bridge", "bridge.mjs"), "");
+  writeFakeBuild(path.join(home, CLONE_ARTEFACT_RELATIVE_PATH));
   fs.mkdirSync(stubs, { recursive: true });
 
   writeStub(stubs, "systemctl", SYSTEMCTL_STUB);
@@ -115,6 +129,18 @@ function makeSandbox(t) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
   return { root, home, stubs, logPath };
+}
+
+/**
+ * A stand-in for the musl release artefact: an executable file with a recognisable
+ * body, so a case can compare what was copied without building anything. The content
+ * is deliberately not a valid ELF — the installer copies bytes and never runs them.
+ */
+function writeFakeBuild(targetPath, content = "#!/bin/sh\necho stand-in for the built bridge\n") {
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.writeFileSync(targetPath, content);
+  fs.chmodSync(targetPath, 0o755);
+  return targetPath;
 }
 
 /** A `node` stub that reports a chosen version and otherwise does nothing. */
@@ -127,17 +153,16 @@ function writeNodeStub(sandbox, version) {
 }
 
 /**
- * Runs the installer with an environment assembled here, not inherited.
- * `path.dirname(process.execPath)` is mandatory: on this host `node` lives in
- * `~/.local/share/pi-node/current/bin`, not in `/usr/bin`, so a PATH without it
- * would make every happy-path run exit 1 for the wrong reason.
+ * Runs the installer with an environment assembled here, not inherited. The `PATH` is
+ * stubs first, then the two system directories — the script needs no interpreter of its
+ * own beyond bash (`/bin/bash`), which the stubs' shebangs find the same way.
  */
 function runInstall(sandbox, args = [], extraEnv = {}) {
   const result = spawnSync(BASH, [SCRIPT_PATH, ...args], {
     encoding: "utf8",
     env: {
       HOME: sandbox.home,
-      PATH: [sandbox.stubs, path.dirname(process.execPath), "/usr/bin", "/bin"].join(":"),
+      PATH: [sandbox.stubs, "/usr/bin", "/bin"].join(":"),
       BC_INSTALL_STUB_LOG: sandbox.logPath,
       ...extraEnv,
     },
@@ -223,7 +248,7 @@ test("install_helpPrintsTheOptionsAndWritesNothing", (t) => {
   // THEN it exits 0, names every option it has, writes nothing and does not talk
   // to systemd at all:
   assert.equal(run.status, 0, run.output);
-  for (const option of ["--dry-run", "--print-token", "--fix-path", "--uninstall", "--help"]) {
+  for (const option of ["--dry-run", "--print-token", "--uninstall", "--help"]) {
     assert.ok(run.stdout.includes(option), `help does not name ${option}:\n${run.stdout}`);
   }
   assert.deepEqual(readTree(sandbox.home), before);
@@ -231,33 +256,31 @@ test("install_helpPrintsTheOptionsAndWritesNothing", (t) => {
   assert.equal(run.stderr, "");
 });
 
-test("install_withOldNode_abortsBeforeWriting", (t) => {
-  // GIVEN a sandbox whose `node` reports version 20,
+test("install_withOldNodeOnThePath_ignoresTheVersion", (t) => {
+  // GIVEN a sandbox whose `node` reports version 20 — the state the installer used to
+  // refuse, because the unit started `node bridge/bridge.mjs`,
   const sandbox = makeSandbox(t);
   writeNodeStub(sandbox, "v20.11.1");
-  const before = readTree(sandbox.home);
 
   // WHEN the installer runs,
   const run = runInstall(sandbox, []);
 
-  // THEN it aborts with exit 1, names the version requirement and writes nothing:
-  assert.equal(run.status, 1, run.output);
-  assert.match(run.stderr, /Node\.js 22 oder neuer wird gebraucht/);
-  assert.match(run.stderr, /v20\.11\.1/);
-  assert.deepEqual(readTree(sandbox.home), before);
+  // THEN it installs and starts as on any other host: the service runs a binary, and
+  // Node is not an operational prerequisite any more — refusing here would turn a
+  // healthy machine into a red preflight:
+  assert.equal(run.status, 0, run.output);
+  assert.ok(!run.stderr.includes("Node"), run.stderr);
+  assert.ok(fs.existsSync(path.join(sandbox.home, BINARY_RELATIVE_PATH)), "binary was not installed");
+  assert.ok(fs.existsSync(path.join(sandbox.home, UNIT_RELATIVE_PATH)), "unit was not installed");
+  assert.ok(readToken(sandbox), "no token was created");
 
-  // AND a PATH without any node at all ends the same way, because "missing" and
-  // "too old" are the same problem for the operator: both need an install, not a
-  // different flag.
-  fs.rmSync(path.join(sandbox.stubs, "node"));
-  const genuinelyMissing = runInstall(sandbox, [], {
-    PATH: [sandbox.stubs, "/usr/bin", "/bin"].join(":"),
-  });
+  // AND the same run on a PATH without any `node` at all ends the same way, which is
+  // what "not a prerequisite" has to mean:
+  const nodeFree = makeSandbox(t);
+  const withoutNode = runInstall(nodeFree, []);
 
-  assert.equal(genuinelyMissing.status, 1, genuinelyMissing.output);
-  assert.match(genuinelyMissing.stderr, /Node\.js nicht gefunden/);
-  assert.match(genuinelyMissing.stderr, /Node\.js 22 oder neuer wird gebraucht/);
-  assert.deepEqual(readTree(sandbox.home), before);
+  assert.equal(withoutNode.status, 0, withoutNode.output);
+  assert.ok(!withoutNode.stderr.includes("Node"), withoutNode.stderr);
 });
 
 test("install_withOpenPort_abortsBeforeWriting", (t) => {
@@ -292,8 +315,8 @@ test("install_withOpenPort_abortsBeforeWriting", (t) => {
 });
 
 test("install_withMissingUnitTarget_abortsBeforeWriting", (t) => {
-  // GIVEN a sandbox whose clone does not sit under `~/browser-control` — the path
-  // the unit's ExecStart names,
+  // GIVEN a sandbox whose clone does not sit under `~/browser-control` — where the
+  // installer looks for the artefact and INSTALL.md §4 clones to,
   const sandbox = makeSandbox(t);
   fs.rmSync(path.join(sandbox.home, "browser-control"), { recursive: true, force: true });
   const before = readTree(sandbox.home);
@@ -304,9 +327,92 @@ test("install_withMissingUnitTarget_abortsBeforeWriting", (t) => {
   // THEN it aborts with exit 1 and names both paths — the expected clone target and
   // the directory this script actually runs from:
   assert.equal(run.status, 1, run.output);
-  assert.ok(run.stderr.includes(path.join(sandbox.home, "browser-control", "bridge", "bridge.mjs")), run.stderr);
+  assert.ok(run.stderr.includes(path.join(sandbox.home, "browser-control")), run.stderr);
   assert.ok(run.stderr.includes(REPOSITORY_ROOT), run.stderr);
   assert.deepEqual(readTree(sandbox.home), before);
+});
+
+test("install_withMissingBinary_abortsBeforeWriting", (t) => {
+  // GIVEN a sandbox whose clone exists but holds no build — the state after a fresh
+  // clone, before `cargo build`,
+  const sandbox = makeSandbox(t);
+  fs.rmSync(path.join(sandbox.home, CLONE_ARTEFACT_RELATIVE_PATH));
+  const before = readTree(sandbox.home);
+
+  // WHEN the installer runs,
+  const run = runInstall(sandbox, []);
+
+  // THEN it aborts with exit 1 before writing anything, names the missing artefact
+  // and the command that produces it — a start without it would only fill the journal:
+  assert.equal(run.status, 1, run.output);
+  assert.match(run.stderr, /nicht gebaut/);
+  assert.ok(run.stderr.includes(path.join(sandbox.home, CLONE_ARTEFACT_RELATIVE_PATH)), run.stderr);
+  assert.match(run.stderr, /cargo build --release --target x86_64-unknown-linux-musl/);
+  assert.deepEqual(readTree(sandbox.home), before);
+  assert.equal(readToken(sandbox), null);
+
+  // AND an artefact that exists but lost its execute bit is refused the same way and
+  // by name: copying it would produce a service systemd starts and that dies with a
+  // permission error instead of a German line. Same case, because the two halves are
+  // one requirement — "the artefact has to be startable" — and a second name would
+  // only inflate the count:
+  const unexecutable = makeSandbox(t);
+  const artefactPath = path.join(unexecutable.home, CLONE_ARTEFACT_RELATIVE_PATH);
+  fs.chmodSync(artefactPath, 0o644);
+  const beforeUnexecutable = readTree(unexecutable.home);
+
+  const refused = runInstall(unexecutable, []);
+
+  assert.equal(refused.status, 1, refused.output);
+  assert.match(refused.stderr, /nicht ausführbar/);
+  assert.ok(refused.stderr.includes(artefactPath), refused.stderr);
+  assert.deepEqual(readTree(unexecutable.home), beforeUnexecutable);
+});
+
+test("install_copiesTheBinaryToLocalBin", async (t) => {
+  // GIVEN a sandbox with nothing installed,
+  const sandbox = makeSandbox(t);
+  const artefactPath = path.join(sandbox.home, CLONE_ARTEFACT_RELATIVE_PATH);
+  const installedPath = path.join(sandbox.home, BINARY_RELATIVE_PATH);
+
+  // WHEN the installer runs,
+  const run = runInstall(sandbox, []);
+
+  // THEN the artefact lies under `~/.local/bin` — the path the unit's ExecStart names —
+  // byte-identical to the build, executable, inside a 755 directory:
+  assert.equal(run.status, 0, run.output);
+  assert.ok(fs.existsSync(installedPath), "binary was not installed");
+  assert.equal(fs.readFileSync(installedPath, "utf8"), fs.readFileSync(artefactPath, "utf8"));
+  assert.equal(fs.statSync(installedPath).mode & 0o777, 0o755);
+  assert.equal(fs.statSync(path.dirname(installedPath)).mode & 0o777, 0o755);
+  assert.ok(run.stdout.includes(installedPath), run.stdout);
+
+  // AND the unit that was installed starts exactly that file, so "copied somewhere"
+  // and "started from there" cannot drift apart:
+  const unitText = fs.readFileSync(path.join(sandbox.home, UNIT_RELATIVE_PATH), "utf8");
+  assert.match(unitText, /^ExecStart=%h\/\.local\/bin\/browser-control-bridge --http$/m);
+
+  // AND a second run with a moment in between rewrites nothing — same modification
+  // time, and the line says so. A copy on every run would swap the inode under a
+  // running service for no reason:
+  const mtimeBefore = fs.statSync(installedPath, { bigint: true }).mtimeNs;
+  await setTimeout(60);
+
+  const again = runInstall(sandbox, []);
+
+  assert.equal(again.status, 0, again.output);
+  assert.equal(fs.statSync(installedPath, { bigint: true }).mtimeNs, mtimeBefore);
+  assert.match(again.stdout, /Bridge-Binary ist schon aktuell/);
+
+  // AND a new build is picked up: identical bytes are the only reason to skip the
+  // copy, not the mere existence of the file:
+  writeFakeBuild(artefactPath, "#!/bin/sh\necho rebuilt\n");
+
+  const rebuilt = runInstall(sandbox, []);
+
+  assert.equal(rebuilt.status, 0, rebuilt.output);
+  assert.equal(fs.readFileSync(installedPath, "utf8"), fs.readFileSync(artefactPath, "utf8"));
+  assert.match(rebuilt.stdout, /Bridge-Binary installieren/);
 });
 
 test("install_guardPathRejectsAPathOutsideTheAllowedSet", (t) => {
@@ -340,6 +446,20 @@ test("install_guardPathRejectsAPathOutsideTheAllowedSet", (t) => {
 
   const allowed = probe(`${sandbox.home}/.config/browser-control/token`);
   assert.equal(allowed.status, 0, allowed.stderr);
+
+  // AND the third place is allowed exactly, not its parent: `~/.local/bin/…` passes
+  // and so does the staging name the installer writes before the rename, while
+  // `~/.local/share/…` is refused — a guard that waved `~/.local` through would allow
+  // every dotfile directory the operator owns:
+  const binary = probe(`${sandbox.home}/.local/bin/browser-control-bridge`);
+  assert.equal(binary.status, 0, binary.stderr);
+
+  const staging = probe(`${sandbox.home}/.local/bin/browser-control-bridge.new`);
+  assert.equal(staging.status, 0, staging.stderr);
+
+  const share = probe(`${sandbox.home}/.local/share/browser-control/token`);
+  assert.equal(share.status, 1, share.stderr);
+  assert.match(share.stderr, /Schreibziel außerhalb der erlaubten Pfade/);
 });
 
 test("install_withUnknownOption_printsHelpAndExitsOne", (t) => {
@@ -663,47 +783,6 @@ test("install_uninstallKeepsTheToken", (t) => {
   assert.ok(!nothingToKeep.stdout.includes("Token bleibt"), nothingToKeep.stdout);
 });
 
-test("install_fixPathWritesTheDropInOnlyWhenNeeded", (t) => {
-  // GIVEN a sandbox whose `node` lives outside /usr/bin — the case the drop-in is
-  // for, since a user unit's PATH does not know that directory,
-  const sandbox = makeSandbox(t);
-  writeStub(sandbox.stubs, "node", "#!/usr/bin/env bash\nset -u\nprintf 'v22.0.0\\n'\nexit 0\n");
-
-  // WHEN the installer runs with --fix-path,
-  const run = runInstall(sandbox, ["--fix-path"]);
-
-  // THEN the drop-in exists, carries the [Service] section and puts the node
-  // directory in front of the PATH:
-  assert.equal(run.status, 0, run.output);
-
-  const dropinPath = path.join(sandbox.home, DROPIN_RELATIVE_PATH);
-  assert.ok(fs.existsSync(dropinPath), "drop-in was not written");
-
-  const content = fs.readFileSync(dropinPath, "utf8");
-  assert.match(content, /^\[Service\]$/m);
-  assert.ok(content.includes(`Environment=PATH=${sandbox.stubs}:`), content);
-
-  // AND a second run leaves the file untouched — it is written only when it is
-  // missing or differs:
-  const mtimeBefore = fs.statSync(dropinPath, { bigint: true }).mtimeNs;
-  const again = runInstall(sandbox, ["--fix-path"]);
-  assert.equal(again.status, 0, again.output);
-  assert.equal(fs.statSync(dropinPath, { bigint: true }).mtimeNs, mtimeBefore);
-  assert.match(again.stdout, /PATH-Drop-in ist schon aktuell/);
-
-  // AND without the flag no drop-in appears at all: the operator asked for the
-  // plain install, not for a changed PATH:
-  const unflagged = makeSandbox(t);
-  writeStub(unflagged.stubs, "node", "#!/usr/bin/env bash\nset -u\nprintf 'v22.0.0\\n'\nexit 0\n");
-  const plain = runInstall(unflagged, []);
-
-  assert.equal(plain.status, 0, plain.output);
-  assert.ok(
-    !fs.existsSync(path.join(unflagged.home, path.dirname(DROPIN_RELATIVE_PATH))),
-    "drop-in directory appeared without --fix-path",
-  );
-});
-
 /** Every regular file under `root`, read as text — except the token file itself. */
 function textFilesUnder(root, excludedPath) {
   const files = [];
@@ -762,8 +841,8 @@ test("install_writesOnlyUnderHome", (t) => {
   const run = runInstall(sandbox, []);
   assert.equal(run.status, 0, run.output);
 
-  // THEN every new entry — file or directory — lies under one of the two places or
-  // is a parent directory that `mkdir -p` had to create:
+  // THEN every new entry — file or directory — lies under one of the three places or
+  // is a parent directory that `mkdir -p` had to create (`~/.config`, `~/.local`):
   const created = relativePathsNewIn(before, readTree(sandbox.home));
 
   assert.ok(created.length > 0, "the run created nothing, so this case proves nothing");
@@ -775,4 +854,5 @@ test("install_writesOnlyUnderHome", (t) => {
   // empty run:
   assert.ok(created.includes(TOKEN_RELATIVE_PATH), created.join(", "));
   assert.ok(created.includes(UNIT_RELATIVE_PATH), created.join(", "));
+  assert.ok(created.includes(BINARY_RELATIVE_PATH), created.join(", "));
 });

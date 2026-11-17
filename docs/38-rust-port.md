@@ -583,6 +583,15 @@ Teil 2 geht erst weiter, wenn diese Runde abgearbeitet ist; gebaut wird nach
   nicht grün bekommt, und beide Proof-Zeilen zählten mit `[A-Za-z0-9]` statt
   `[A-Za-z0-9_]` (jeder Node-Name trägt weitere Unterstriche). Die
   Runde-1-Zeile bleibt als Protokoll stehen, wie sie war.
+- **Stufe 4a gebaut (2026-11-17):** Unit und Installer zeigen auf das Binary.
+  `deploy/browser-control.service` startet
+  `%h/.local/bin/browser-control-bridge --http` (`RestartPreventExitStatus=2`
+  bleibt: Exit 2 heißt „Tokendatei fehlt oder ist zu kurz", das heilt kein
+  Neustart); `scripts/install.sh` prüft das gebaute musl-Artefakt (vorhanden
+  **und** ausführbar), kopiert es mit `0755` idempotent (Staging + `mv` gegen
+  `ETXTBSY`), `guard_path` kennt `$HOME/.local/bin` als dritten Ort, und
+  `--fix-path` samt Drop-in-Logik ist **ersatzlos entfallen**. **31 Fälle**
+  (`install_`/`browserControlService_`/`execStart_`), `npm test` 765 grün.
 - **Stufe 3 gebaut (2026-11-17):** Windows-Seite. `platform/windows.rs` holt den
   Portbesitzer über `GetExtendedTcpTable` (`TCP_TABLE_OWNER_PID_ALL`, IPv4 **und**
   IPv6, `LISTEN`/`ESTAB`) und `QueryFullProcessImageNameW`; `stdio.rs` erkennt

@@ -19,31 +19,46 @@ fehlt.
 ## Ziel
 
 **Stand 2026-11-15: gebaut, abgenommen und in `v0.2.0` veröffentlicht** — 21
-Tests, fünf Mutationsproben, Code-Review `✅` nach einem Muss-Befund. Es fehlen
-nur die drei Pfade, die ein Stub nicht erreicht (`## Bekannte Lücken`).
+Tests, fünf Mutationsproben, Code-Review `✅` nach einem Muss-Befund.
 
-- **Ein Befehl** auf dem Server: `./scripts/install.sh` legt das Token an,
-  installiert die systemd-User-Unit, aktiviert und startet den Dienst und prüft
-  ihn. Danach steht da, was in Firefox noch zu tun ist — mit Endpunkt und Token
-  zum Einfügen.
+**Stand 2026-11-17, nachgezogen in Stufe 4a von `docs/38`:** die Bridge ist ein
+statisch gelinktes Rust-Binary, also prüft und kopiert das Skript ein **Binary**
+statt einer Node-Installation. Es hat damit **22 `install_`-Fälle**; zusammen mit
+den neun Unit-Fällen aus `test/deploy.test.js` sind es **31**. Neu sind
+`install_copiesTheBinaryToLocalBin` und
+`install_withMissingBinary_abortsBeforeWriting`; `--fix-path` ist entfallen
+(`## Die Optionen`), und der frühere `install_withOldNode_abortsBeforeWriting`
+heißt jetzt `install_withOldNodeOnThePath_ignoresTheVersion` und belegt das
+Gegenteil: eine alte Node-Version stört nicht mehr, weil Node keine
+Betriebsvoraussetzung ist.
+
+- **Ein Befehl** auf dem Server: `./scripts/install.sh` kopiert das gebaute
+  Bridge-Binary nach `~/.local/bin`, legt das Token an, installiert die
+  systemd-User-Unit, aktiviert und startet den Dienst und prüft ihn. Danach steht
+  da, was in Firefox noch zu tun ist — mit Endpunkt und Token zum Einfügen.
 - **Idempotent.** Ein zweiter Lauf ändert nichts, was schon stimmt. Ein
   **vorhandenes Token wird nie überschrieben** — Rotation bleibt Handarbeit
   und eine Entscheidung des Betreibers.
 - **Das Token erscheint genau einmal**, auf stdout, mit der Aufforderung, es
   jetzt einzufügen. Nicht in einer Datei außer der Tokendatei, nicht im
   Journal, nicht in einer Logzeile des Skripts.
-- **Nichts außerhalb von zwei Orten.** Geschrieben wird nur nach
-  `~/.config/browser-control/` und `~/.config/systemd/user/` (samt
-  `browser-control.service.d/`). Dazu gehören die Elternverzeichnisse, die ein
-  `mkdir -p` dabei anlegt (`~/.config`, `~/.config/systemd`) — sie stehen
-  ausdrücklich in der erlaubten Menge, sonst wäre die eigene Zusage nicht
-  erfüllbar. **Kein `sudo`**, kein systemweiter Dienst.
-- **Vorprüfungen vor dem ersten Schreibvorgang:** Node ≥ 22, freie Ports
-  `8110`/`8111` (mit Namensnennung des Besitzers), lesbarer Repo-Pfad,
-  beschreibbares `$HOME`. Was fehlt, wird **vor** dem Schreiben gemeldet.
+- **Nichts außerhalb von drei Orten.** Geschrieben wird nur nach
+  `~/.config/browser-control/`, `~/.config/systemd/user/` und `~/.local/bin/`.
+  Dazu gehören die Elternverzeichnisse, die ein `mkdir -p` dabei anlegt
+  (`~/.config`, `~/.config/systemd`, `~/.local`) — sie stehen ausdrücklich in der
+  erlaubten Menge, sonst wäre die eigene Zusage nicht erfüllbar. **Kein `sudo`**,
+  kein systemweiter Dienst.
+- **Vorprüfungen vor dem ersten Schreibvorgang:** gebautes Bridge-Binary
+  (`bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge`,
+  vorhanden **und** ausführbar), freie Ports `8110`/`8111` (mit Nennung des
+  Besitzers), lesbarer Klon-Pfad, beschreibbares `$HOME`. Was fehlt, wird **vor**
+  dem Schreiben gemeldet.
 - **Deutsche Ausgabe**, englische Kommentare im Code — wie im Projekt üblich.
 - **Kein neues Werkzeug, keine Abhängigkeit.** Bash und die Werkzeuge, die
-  ohnehin gebraucht werden (`openssl`, `systemctl`, `ss`, `node`).
+  ohnehin gebraucht werden (`openssl`, `systemctl`, `ss`, `cmp`, `mv`). Der
+  Rust-Build ist **Vorbedingung, nicht Teil des Skripts**: `cargo build` dauert
+  Minuten und braucht auf einer frischen Maschine erst die Werkzeugkette, deshalb
+  läuft er von Hand (`bridge-rs/README.md`, "Building").
 
 ## Non-goals
 
@@ -66,7 +81,7 @@ nur die drei Pfade, die ein Stub nicht erreicht (`## Bekannte Lücken`).
 |---|---|
 | Wird ein vorhandenes Token überschrieben? | **nein** — es wird geprüft (Länge, Rechte) und sonst gemeldet |
 | Darf das Skript `sudo` benutzen? | **nein** — User-Unit, User-Token, User-State |
-| Darf es die PATH-Drop-in-Datei schreiben? | **nur mit `--fix-path`**, und nur wenn `node` nicht in `/usr/bin` liegt |
+| Darf es das Bridge-Binary kopieren? | **ja** — von `<clone>/bridge-rs/target/x86_64-unknown-linux-musl/release/` nach `$HOME/.local/bin`, `0755`, idempotent; fehlt das Artefakt, bricht der Lauf mit Exit `1` und dem `cargo build`-Befehl ab |
 | Darf es den Dienst entfernen? | **nur mit `--uninstall`**, und das Token bleibt dabei stehen |
 | Token-Schwelle | **32 Hex-Zeichen**, wie `bridge/config.mjs` — was die Bridge akzeptiert, lehnt das Skript nicht ab; 32–63 Zeichen mit Hinweis |
 | Was passiert bei belegten Ports? | Meldung mit Besitzer (`ss`), Abbruch **vor** dem Schreiben; ein laufender eigener Dienst zählt nicht als Konflikt |
@@ -78,14 +93,18 @@ nur die drei Pfade, die ein Stub nicht erreicht (`## Bekannte Lücken`).
 | *(ohne)* | installieren oder reparieren, dann prüfen und den Rest ansagen |
 | `--dry-run` | alles zeigen, nichts schreiben, nichts starten |
 | `--print-token` | das vorhandene Token ausgeben, sonst nichts tun |
-| `--fix-path` | die Drop-in-Datei für `PATH` schreiben, wenn `node` nicht in `/usr/bin` liegt |
-| `--uninstall` | Dienst stoppen und deaktivieren, Unit entfernen; **Token bleibt** |
+| `--uninstall` | Dienst stoppen und deaktivieren, Unit entfernen; Token und Binary bleiben |
 | `--help` | die Optionen und was sie tun |
 
+Die frühere Option für eine `PATH`-Drop-in-Datei gibt es **nicht mehr** (Stufe 4a
+von `docs/38`): die Unit startet ein Binary und braucht dafür keinen `PATH`. Wer
+sie aufruft, bekommt die Meldung über die unbekannte Option und Exit `1`.
+
 **Exit-Codes:** `0` Erfolg; `1` der Lauf wurde abgebrochen — Vorprüfung
-gescheitert (Node, Repo-Pfad, `$HOME`, Ports), unbekannte Option, der Dienst
-nach dem Start nicht `active`, oder ein Schreibziel außerhalb der erlaubten
-Menge (`guard_path`); `2` Token fehlt oder ist zu kurz —
+gescheitert (Binary nicht gebaut oder nicht ausführbar, Klon-Pfad, `$HOME`,
+Ports), unbekannte Option, der Dienst nach dem Start nicht `active`, oder ein
+Schreibziel außerhalb der erlaubten Menge (`guard_path`); `2` Token fehlt oder
+ist zu kurz —
 derselbe Code, den die Bridge für denselben Zustand benutzt. Die Meldung sagt
 jeweils, welche der Ursachen es war; die Zahl allein ist absichtlich grob.
 
@@ -101,7 +120,9 @@ Schritt — bei einem handgestarteten Bridge aus `INSTALL.md` §3 ist das
 | Datei | Fall | Was er beweist |
 |---|---|---|
 | `test/install.test.js` | `install_helpPrintsTheOptionsAndWritesNothing` | `--help`: Exit `0`, alle Optionen genannt, nichts geschrieben |
-| `test/install.test.js` | `install_withOldNode_abortsBeforeWriting` | fehlendes Node oder Major < 22 ⇒ Exit `1`, keine Datei |
+| `test/install.test.js` | `install_withOldNodeOnThePath_ignoresTheVersion` | `node` mit `v20` auf dem `PATH` (und ein Lauf ganz ohne `node`) ⇒ Exit `0`: Node ist keine Betriebsvoraussetzung mehr |
+| `test/install.test.js` | `install_withMissingBinary_abortsBeforeWriting` | kein Artefakt **oder** eines ohne Ausführungsrecht ⇒ Exit `1` mit `cargo build`-Befehl, keine Datei |
+| `test/install.test.js` | `install_copiesTheBinaryToLocalBin` | Binary liegt unter `~/.local/bin` mit `0755`, byte-gleich; zweiter Lauf schreibt nicht, ein neuer Build schon |
 | `test/install.test.js` | `install_withOpenPort_abortsBeforeWriting` | belegter Port ⇒ Exit `1`, Meldung mit Port und PID, kein Token |
 | `test/install.test.js` | `install_withMissingUnitTarget_abortsBeforeWriting` | Klon nicht unter `~/browser-control` ⇒ Exit `1`, Meldung nennt beide Pfade |
 | `test/install.test.js` | `install_guardPathRejectsAPathOutsideTheAllowedSet` | der Pfadwächter bricht bei `/etc/passwd` mit Exit `1` ab |
@@ -118,15 +139,17 @@ Schritt — bei einem handgestarteten Bridge aus `INSTALL.md` §3 ist das
 | `test/install.test.js` | `install_isIdempotent` | zweiter Lauf: `openssl` einmal, Unit-`mtimeNs` gleich, eigener Dienst kein Portkonflikt |
 | `test/install.test.js` | `install_dryRunUninstallKeepsTheUnit` | `--dry-run --uninstall` sagt an und entfernt nichts |
 | `test/install.test.js` | `install_uninstallKeepsTheToken` | `--uninstall`: `disable --now`, Unit weg, Token bleibt |
-| `test/install.test.js` | `install_fixPathWritesTheDropInOnlyWhenNeeded` | `--fix-path` schreibt `path.conf` nur, wenn nötig; ohne Flag entsteht sie nicht |
 | `test/install.test.js` | `install_printsTheTokenOnce` | Token genau einmal auf stdout, nirgends sonst |
 | `test/install.test.js` | `install_writesOnlyUnderHome` | jede neue Datei liegt unter den drei erlaubten Pfaden |
 | `npm test` | `# fail 0`, `# cancelled 0`, `# skipped 0` | nichts ist kaputt (auf einem Host mit nicht-interner IPv4) |
 | `bash -n scripts/install.sh` | Exit 0 | Syntax |
 
 Die Tests fahren das Skript als **Prozess** mit einem temporären `HOME` und einem
-**Stub-Verzeichnis am Anfang von `PATH`** (`systemctl`, `ss`, `openssl`, dazu ein
-`node`-Stub mit `v20` für den alten-Node-Fall) — nichts am echten System. Die
+**Stub-Verzeichnis am Anfang von `PATH`** (`systemctl`, `ss`, `openssl`; ein
+`node`-Stub nur in dem Fall, der beweist, dass die Version keine Rolle mehr
+spielt) — nichts am echten System. Die Sandbox legt `home/browser-control/` mit
+einem **Ersatz-Artefakt** unter `bridge-rs/target/…/release/` an: ein
+ausführbares Skript, damit kein Test einen `cargo`-Build braucht. Die
 Stub-Antworten werden **je Fall** über die Umgebung gesetzt
 (`BC_INSTALL_STUB_SS`, `BC_INSTALL_STUB_IS_ACTIVE`, `BC_INSTALL_STUB_MAINPID`);
 `runInstall(sandbox, args, extraEnv = {})` reicht sie durch. `test/install.test.js` ist neu; das Skript selbst bindet keinen
@@ -141,10 +164,12 @@ ohne ihn liest `grep` stdin und zählt immer `0`) — **und** dass er grün läu
 ⇒ **1**. Ein Name im Text beweist nichts.
 
 1. **Ein Befehl richtet ein.** Auf leerem, temporärem `HOME` (mit Stubs)
-   hinterlässt `./scripts/install.sh`: Tokendatei `600` mit 65 Bytes, Unit unter
+   hinterlässt `./scripts/install.sh`: das Binary unter `~/.local/bin` (`0755`,
+   byte-gleich zum Build), Tokendatei `600` mit 65 Bytes, Unit unter
    `~/.config/systemd/user/`, und `systemctl --user daemon-reload` sowie
    `enable --now browser-control` wurden gerufen, danach `is-active`.
-   Beweis: `install_installsAndStartsTheUnit` **und**
+   Beweis: `install_installsAndStartsTheUnit`,
+   `install_copiesTheBinaryToLocalBin` **und**
    `install_createsTokenWithTightPermissions` (Datei `600`, 65 Bytes = 64
    Hex-Zeichen plus Zeilenumbruch).
 2. **Idempotent, Token unangetastet.** Zweiter Lauf: Tokendatei byte-gleich
@@ -154,11 +179,13 @@ ohne ihn liest `grep` stdin und zählt immer `0`) — **und** dass er grün läu
    Beweis: `install_dryRunWritesNothing`; `install_dryRunUninstallKeepsTheUnit`
    (`--dry-run --uninstall` sagt an, die Unit bleibt, kein `systemctl`) — und
    `--dry-run --print-token` sagt an, statt das Token auszugeben.
-4. **Vorprüfungen greifen vor dem ersten Schreibvorgang.** Fehlendes Node,
-   falsche Version, belegter Port und ein Klon außerhalb `~/browser-control`
-   enden mit Exit `1`, ohne Datei. Beweis: `install_withOldNode_abortsBeforeWriting`,
+4. **Vorprüfungen greifen vor dem ersten Schreibvorgang.** Ein fehlendes oder
+   nicht ausführbares Binary, ein belegter Port und ein Klon außerhalb
+   `~/browser-control` enden mit Exit `1`, ohne Datei. Beweis:
+   `install_withMissingBinary_abortsBeforeWriting`,
    `install_withOpenPort_abortsBeforeWriting`,
-   `install_withMissingUnitTarget_abortsBeforeWriting`.
+   `install_withMissingUnitTarget_abortsBeforeWriting`. Dass Node dafür **nicht**
+   mehr befragt wird, belegt `install_withOldNodeOnThePath_ignoresTheVersion`.
 5. **Token-Codes wie die Bridge.** Unter 32 Hex-Zeichen ⇒ Exit `2` mit Pfad,
    Datei unverändert; 32–63 Zeichen ⇒ akzeptiert (die Bridge startet damit) mit
    einem Hinweis auf die 64 Zeichen aus `INSTALL.md`. Beweis:
@@ -170,13 +197,16 @@ ohne ihn liest `grep` stdin und zählt immer `0`) — **und** dass er grün läu
    nichts anderes tut.
 7. **`--uninstall` lässt das Token stehen.** Beweis:
    `install_uninstallKeepsTheToken`.
-8. **`--fix-path` schreibt nur, wenn nötig** — nämlich wenn `node` nicht in
-   `/usr/bin` liegt; ohne das Flag entsteht kein Drop-in. Beweis:
-   `install_fixPathWritesTheDropInOnlyWhenNeeded`.
+8. **Das Binary liegt dort, wo die Unit es startet, und wird nicht bei jedem
+   Lauf neu geschrieben.** `~/.local/bin/browser-control-bridge`, `0755`,
+   byte-gleich zum Artefakt; der zweite Lauf lässt die `mtimeNs` stehen, ein
+   neuer Build kommt an. Beweis: `install_copiesTheBinaryToLocalBin`; die
+   installierte Unit trägt `ExecStart=%h/.local/bin/browser-control-bridge
+   --http` (dieselbe Zeile pinnt `test/deploy.test.js`).
 9. **Nichts außerhalb der drei Orte, kein `sudo`.** Dynamisch: jede neue Datei
-   liegt unter `~/.config/browser-control/` oder `~/.config/systemd/user/`
-   samt `browser-control.service.d/` — dazu die Eltern `~/.config` und
-   `~/.config/systemd`, die `mkdir -p` anlegt (`install_writesOnlyUnderHome`).
+   liegt unter `~/.config/browser-control/`, `~/.config/systemd/user/` oder
+   `~/.local/bin/` — dazu die Eltern `~/.config`, `~/.config/systemd` und
+   `~/.local`, die `mkdir -p` anlegt (`install_writesOnlyUnderHome`).
    Statisch: der Wächter ist **falsifizierbar** — das Skript lässt sich
    quellen (`if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi`) und ein
    Fall ruft `guard_path /etc/passwd` ⇒ Exit `1`. Dazu
@@ -198,7 +228,7 @@ ohne ihn liest `grep` stdin und zählt immer `0`) — **und** dass er grün läu
     ⇒ **2**; `git status --porcelain | grep -vE '^(A|\?\?| M) (scripts/install\.sh|test/install\.test\.js|INSTALL\.md|README\.md|docs/)'`
     ⇒ **keine Ausgabe**; `git diff -- package.json` ⇒ leer; `git diff --
     extension/ bridge/` ⇒ leer.
-13. **Die Hilfsoptionen sind belegt.** `--help` nennt die fünf Flags, ändert
+13. **Die Hilfsoptionen sind belegt.** `--help` nennt die vier Flags, ändert
     nichts und ruft kein `systemctl`. Beweis:
     `install_helpPrintsTheOptionsAndWritesNothing`.
 14. **Die Randfälle verhalten sich wie beschrieben.** Unbekannte Option ⇒
@@ -218,11 +248,13 @@ Abhängigkeit.
 
 **Was den Plan bindet** (aus den Dateien gelesen, nicht vermutet):
 
-- `deploy/browser-control.service` trägt
-  `ExecStart=/usr/bin/env node %h/browser-control/bridge/bridge.mjs --http` —
-  der Klonpfad ist **fest** (`INSTALL.md` §4 klont nach `~/browser-control`).
-  Die Unit wird deshalb **byte-gleich kopiert**, nicht umgeschrieben; ein Klon
-  an anderem Ort ist ein Vorprüfungsfehler, kein stiller Defekt.
+- `deploy/browser-control.service` trug damals
+  `ExecStart=/usr/bin/env node %h/browser-control/bridge/bridge.mjs --http`. Mit
+  Stufe 4a von `docs/38` trägt sie
+  `ExecStart=%h/.local/bin/browser-control-bridge --http` — der feste Pfad ist
+  damit `$HOME/.local/bin`, nicht der Klon. Die Unit wird weiter **byte-gleich
+  kopiert**, nicht umgeschrieben; ein Klon an anderem Ort bleibt ein
+  Vorprüfungsfehler, kein stiller Defekt.
 - `test/deploy.test.js` pinnt die Unit-Zeilen und verbietet `/home/` und
   tokenförmige Strings — die *Quelle* bleibt unangetastet, das Skript liest sie
   nur.
@@ -254,21 +286,29 @@ Abhängigkeit.
    deutschen Hinweis auf die 64 Zeichen aus `INSTALL.md` quittiert; unter 32
    ⇒ Exit `2`. Eine strengere Grenze im Skript wäre ein Fehlalarm: sie würde
    ein Token ablehnen, das die Bridge akzeptiert.
-2. **Repo-Pfad-Vorprüfung**: (a) `${repo_root}/bridge/bridge.mjs` lesbar,
-   (b) das `ExecStart`-Ziel der Unit (`$HOME/browser-control/bridge/bridge.mjs`)
-   existiert. Fehlt (b), Exit `1` mit beiden Pfaden. Folge für die Tests: die
-   Sandbox legt `home/browser-control/bridge/bridge.mjs` an.
-3. **`--fix-path` installiert mit** und schreibt zusätzlich das Drop-in;
-   erster `PATH`-Eintrag ist `%h/.local/share/pi-node/current/bin`, wenn dieses
-   Verzeichnis existiert, sonst `dirname "$(command -v node)"`.
+2. **Repo-Pfad-Vorprüfung**: (a) das Unit-Template in `deploy/` ist lesbar,
+   (b) `$HOME/browser-control` existiert (dort liegt der Klon, aus dem Binary und
+   Unit kommen). Fehlt (b), Exit `1` mit beiden Pfaden. **Nachtrag Stufe 4a**
+   (`docs/38`): das frühere `ExecStart`-Ziel `home/browser-control/bridge/bridge.mjs`
+   gibt es nicht mehr; an seine Stelle tritt (c) das **Artefakt**
+   `<clone>/bridge-rs/target/x86_64-unknown-linux-musl/release/browser-control-bridge`,
+   vorhanden **und** ausführbar. Folge für die Tests: die Sandbox legt
+   `home/browser-control/` mit einem ausführbaren Ersatz-Artefakt an.
+3. **Kein `PATH`-Drop-in mehr (Stufe 4a).** Der ursprüngliche Plan wollte mit
+   der früheren Option eine `PATH`-Datei schreiben, erster Eintrag
+   `%h/.local/share/pi-node/current/bin` oder `dirname "$(command -v node)"`.
+   Beides ist mit dem Binary entfallen: die Unit startet einen absoluten Pfad
+   und braucht keinen `PATH`. Das Skript kopiert das Artefakt nach
+   `$HOME/.local/bin` (`0755`, über eine Staging-Datei und `mv`, damit ein
+   laufender Dienst nicht `ETXTBSY` trifft).
 4. **Unbekannte Option** ⇒ deutsche Meldung + Kurzhilfe + Exit `1`.
 
-**Schreibgrenze als Mechanik.** Alle Schreibvorgänge laufen durch zwei
+**Schreibgrenze als Mechanik.** Alle Schreibvorgänge laufen durch die zwei
 Funktionen mit Pfadwächter — `ensure_dir(path, mode)` und
 `put_file(path, mode)` —, die vor dem Schreiben prüfen, dass `path` unter
-`$HOME/.config/browser-control/`, `$HOME/.config/systemd/user/` (inkl.
-`browser-control.service.d/`) oder deren Eltern `$HOME/.config` und
-`$HOME/.config/systemd` liegt, und sonst mit Exit `1` abbrechen. Nur so ist „nichts außerhalb der drei Orte"
+`$HOME/.config/browser-control/`, `$HOME/.config/systemd/user/` oder
+`$HOME/.local/bin/` liegt (samt deren Eltern `$HOME/.config`,
+`$HOME/.config/systemd`, `$HOME/.local`), und sonst mit Exit `1` abbrechen. Nur so ist „nichts außerhalb der drei Orte"
 eine Eigenschaft des Codes.
 
 ---
@@ -276,15 +316,28 @@ eine Eigenschaft des Codes.
 **1. Gerüst: Optionen, Ausgabe, Exit-Codes, Vorprüfungen — und das Testgerüst**
 (Umsetzer)
 
+**Nachtrag Stufe 4a (`docs/38`, 2026-11-17):** die folgenden Zeilen beschreiben
+den Stand, in dem diese Stufe gebaut wurde. Mit dem Rust-Binary ist
+`check_node_version()` zu `check_binary()` geworden (Artefakt vorhanden **und**
+ausführbar, sonst Exit `1` mit dem `cargo build`-Befehl), `parse_args()` kennt
+keinen `fix-path`-Modus mehr, die Sandbox legt statt `bridge/bridge.mjs` ein
+Ersatz-Artefakt unter `bridge-rs/target/…/release/` an, `runInstall` kommt ohne
+`path.dirname(process.execPath)` aus (das Skript ruft kein `node` mehr),
+`install_helpPrintsTheOptionsAndWritesNothing` nennt vier Flags und
+`install_withOldNode_abortsBeforeWriting` heißt
+`install_withOldNodeOnThePath_ignoresTheVersion`.
+
 Dateien: `scripts/install.sh` (neu), `test/install.test.js` (neu).
 
 - `scripts/install.sh`: `#!/usr/bin/env bash`, `set -euo pipefail`; Konstanten
   für die Pfade; `repo_root()` über `${BASH_SOURCE[0]}` (nie `$(pwd)`);
   `usage()`; `parse_args()` mit den Modi `install`, `dry-run`, `print-token`,
-  `fix-path`, `uninstall`, `help`; `say()/step()/die()`; `guard_path()`;
+  `fix-path`, `uninstall`, `help` (der `fix-path`-Modus ist mit Stufe 4a
+  entfallen); `say()/step()/die()`; `guard_path()`;
   `ensure_dir()`/`put_file()` (in dieser Stufe nur definiert, noch kein Aufruf).
 - Vorprüfungen **vor** jedem Schreiben, mit Bash-Builtins plus `ss`:
-  `check_node_version()` (Major ≥ 22), `check_repo_path()` (Entscheidung 2),
+  `check_node_version()` (Major ≥ 22; seit Stufe 4a `check_binary()` — Artefakt
+  vorhanden **und** ausführbar), `check_repo_path()` (Entscheidung 2),
   `check_home_writable()`, `check_ports()` (`ss -ltnp`, Ports `8110`/`8111`,
   Besitzer aus `users:(("name",pid=N`; „Besitzer nicht ermittelbar", wenn `-p`
   nichts liefert), `own_service_pid()` (`systemctl --user show
@@ -297,7 +350,9 @@ Dateien: `scripts/install.sh` (neu), `test/install.test.js` (neu).
   wenn keins da ist. `own_service_pid()` wird nur gefragt, wenn ein Port
   belegt ist; ohne Konflikt ruft der trockene Lauf kein `systemctl`.
 - `test/install.test.js`: `makeSandbox(t)` → `{ root, home, stubs, logPath }`
-  (`mkdtempSync`, `home/browser-control/bridge/bridge.mjs` angelegt,
+  (`mkdtempSync`, `home/browser-control/bridge/bridge.mjs` angelegt — seit
+  Stufe 4a stattdessen `home/browser-control/` mit ausführbarem Ersatz-Artefakt
+  unter `bridge-rs/target/…/release/`,
   `t.after` räumt auf); `writeStub(dir, name, body)` (Modus `0o755`);
   `runInstall(sandbox, args, extraEnv = {})` = `spawnSync(BASH, [SCRIPT, ...args],
   { env: { HOME, PATH: [stubs, path.dirname(process.execPath), "/usr/bin", "/bin"].join(":"),
@@ -309,7 +364,8 @@ Dateien: `scripts/install.sh` (neu), `test/install.test.js` (neu).
   Host liegt `node` nicht in `/usr/bin`, ohne diesen Eintrag fände jeder
   Happy-Path-Lauf kein Node und endete mit Exit `1`. Der `v20`-Stub liegt im
   Stub-Verzeichnis und gewinnt durch die Reihenfolge. `readTree(home)` gehört
-  deshalb in diese Stufe.
+  deshalb in diese Stufe. Seit Stufe 4a fällt der `PATH`-Eintrag weg — das
+  Skript ruft kein `node` mehr, der `PATH` ist `[stubs, "/usr/bin", "/bin"]`.
 - Stubs, mit definierten Antworten: `systemctl` protokolliert `--user $*` und
   antwortet je Subkommando — `daemon-reload` ⇒ `0`, `enable …` ⇒ `0`,
   `is-active --quiet` ⇒ `$BC_INSTALL_STUB_IS_ACTIVE` (Default `0`),
@@ -323,9 +379,12 @@ Dateien: `scripts/install.sh` (neu), `test/install.test.js` (neu).
   Abnahme rot machen.
 - Fälle: `install_helpPrintsTheOptionsAndWritesNothing` (Exit `0`, die fünf
   Flags `--dry-run`, `--print-token`, `--fix-path`, `--uninstall`, `--help`
-  genannt, `readTree(home)` unverändert, keine `systemctl`-Zeile),
+  genannt — seit Stufe 4a vier, weil die `PATH`-Option entfällt; `readTree(home)`
+  unverändert, keine `systemctl`-Zeile),
   `install_withOldNode_abortsBeforeWriting` (Node-Stub `v20.11.1` ⇒ Exit `1`,
-  keine Datei; zweiter Lauf ohne `node` im `PATH` ⇒ dieselbe Meldung),
+  keine Datei; zweiter Lauf ohne `node` im `PATH` ⇒ dieselbe Meldung; seit
+  Stufe 4a umgekehrt: `install_withOldNodeOnThePath_ignoresTheVersion` ⇒ Exit
+  `0`),
   `install_withOpenPort_abortsBeforeWriting` (Port `8110` mit fremder PID ⇒
   Exit `1`, Meldung mit Port und PID, kein Token),
   `install_withMissingUnitTarget_abortsBeforeWriting` (Sandbox ohne
@@ -409,6 +468,12 @@ node --test --test-reporter=tap test/install.test.js | grep -cE '^ok [0-9]+ - in
 ---
 
 **4. `--uninstall` und `--fix-path`** (Umsetzer)
+
+**Nachtrag Stufe 4a (`docs/38`, 2026-11-17): `--fix-path` ist ersatzlos
+entfallen** — samt `ensure_dropin()`, dem Drop-in-Verzeichnis und dem zugehörigen
+Fall. Die Unit startet ein Binary und braucht keinen `PATH`. `--uninstall`
+entfernt weiter nur Dienst und Unit; Binary und Token bleiben liegen. Die
+Schritte unten bleiben als Protokoll stehen.
 
 Dateien: `scripts/install.sh`, `test/install.test.js`.
 
@@ -507,9 +572,10 @@ Acht Punkte waren nicht so prüfbar, wie sie dastanden; sie sind in
    (`grep -cE '(>|>>)[[:space:]]*/(etc|usr|var|opt|srv|root)'` ⇒ 0).
 4. **Kriterium 9, `sudo`:** das Wort darf im Skript **gar nicht** vorkommen —
    auch nicht in einer Ausgabezeile „kein sudo nötig".
-5. **Kriterium 8** ist nur halb prüfbar: den Fall „Node liegt in `/usr/bin`"
-   kann ein Stub-Test nicht herstellen (Root nötig) → Kriterium prüft die
-   schreibende Seite; die `/usr/bin`-Bedingung steht in `## Bekannte Lücken`.
+5. **Kriterium 8** ist nur halb prüfbar gewesen: den Fall „Node liegt in `/usr/bin`"
+   kann ein Stub-Test nicht herstellen (Root nötig). Mit Stufe 4a von `docs/38`
+   ist die Frage gegenstandslos — es gibt kein Drop-in mehr, und Kriterium 8
+   prüft jetzt das kopierte Binary.
 6. **Kriterium 10, `# skipped 0`** ist hostabhängig (`test/bridge.test.js`
    überspringt sich auf Hosts ohne nicht-interne IPv4-Adresse) → Kriterium
    nennt den Abnahme-Host.
@@ -538,12 +604,13 @@ Acht Punkte waren nicht so prüfbar, wie sie dastanden; sie sind in
   Stub macht den Secret-Grep der Abnahme rot — **und die 32-Zeichen-Grenze
   genügt schon**: der Grep schlägt ab 32 Hex-Zeichen an. Beide Fixtures werden
   deshalb zur Laufzeit gebaut.
-- **Sandbox ohne Klon.** Ohne `home/browser-control/bridge/bridge.mjs` scheitert
-  jede Stufe an der Vorprüfung → `makeSandbox` legt es an, und
+- **Sandbox ohne Klon.** Ohne `home/browser-control` samt ausführbarem Artefakt
+  scheitert jede Stufe an der Vorprüfung → `makeSandbox` legt beides an, und
   `install_writesOnlyUnderHome` zählt nur **neue** Einträge.
-- **`--fix-path`-Inhalt.** `INSTALL.md` nennt `%h/.local/share/pi-node/current/bin`
-  **nur, wenn es existiert** — sonst `dirname(node)`. Ein fester String macht den
-  Test auf der Maschine des Betreibers falsch.
+- **Ein laufender Dienst und `ETXTBSY`.** Das Binary wird neben das Ziel
+  geschrieben und per `mv` ersetzt; ein `cat > $BIN_FILE` träfe einen
+  laufenden Prozess und bräche den Lauf ab. Der Rename hält außerdem davon ab,
+  dass eine halb kopierte Datei die ist, die systemd startet.
 
 ### Ordering and dependencies
 
@@ -561,25 +628,30 @@ Nicht angefasst: `package.json`, `test/ports.js`, `deploy/`, `bridge/`,
 - **Token-Rotation** als eigener Befehl — hier bewusst nicht (`## Non-goals`).
 - **Der echte systemd-Lauf** auf einer fremden Distribution: die Tests prüfen
   Aufrufe, nicht Wirkung.
-- **`--fix-path`-Zweig `/usr/bin`** und **`is-active`-Fehlschlag** sind nur im
-  echten Lauf entscheidbar.
+- **Der `is-active`-Fehlschlag** ist nur im echten Lauf entscheidbar.
 - **Klon an anderem Ort als `~/browser-control`**: heute Exit `1` mit Meldung;
   ein `ExecStart=`-Drop-in wäre der saubere Ausweg, ist aber eine eigene Spec.
+- **Der Rust-Build** bleibt Handarbeit (`cargo build`, `bridge-rs/README.md`);
+  das Skript baut nichts und sagt nur, was fehlt.
 - **macOS/Windows, Caddy, `ss`-lose Systeme** bleiben in `## Bekannte Lücken`.
 
 ## Bekannte Lücken
 
-Stand 2026-11-12, vor der Umsetzung:
+Stand 2026-11-17, nach Stufe 4a von `docs/38`:
 
 - **Kein Test gegen ein echtes systemd.** Die Tests prüfen die Aufrufe über
   Stubs; ob der Dienst auf einer fremden Distribution wirklich startet, sagt
   erst der Lauf dort.
 - **Nicht abgedeckt: macOS und Windows.** Das Skript ist Linux + systemd.
 - **Caddy bleibt Handarbeit** — das Skript kennt keinen Proxy.
-- **Der Zweig „node liegt in `/usr/bin`" von `--fix-path`** ist nur indirekt
-  prüfbar: der Fall verzweigt auf `fs.existsSync("/usr/bin/node")` und sichert
-  je Zweig das passende Ergebnis zu. Auf einem Host ohne `/usr/bin/node` (wie
-  diesem) läuft damit nur der Schreibzweig; die andere Hälfte bleibt ungeprüft.
+- **`~/.local/bin` ist ein dritter Schreibort** (Stufe 4a von `docs/38`). Der
+  Pfadwächter deckt ihn, `install_writesOnlyUnderHome` prüft ihn — aber ein
+  bereits laufender Dienst wird beim Kopieren nur deshalb nicht angefasst, weil
+  das Binary über eine Staging-Datei und `mv` ersetzt wird. Der Dienst läuft bis
+  zu seinem nächsten Neustart weiter mit dem alten Inode.
+- **`cargo build` ist Vorbedingung, nicht Teil des Skripts.** Ein Test, der einen
+  Release-Build startet, wäre Minuten statt Sekunden lang; die Sandbox legt
+  stattdessen ein ausführbares Ersatz-Artefakt an.
 - **`is-active` schlägt fehl** (Dienst startet nicht): der Pfad ist implementiert
   und dokumentiert, aber kein Test stellt ihn her.
 - **Ein Klon außerhalb `~/browser-control`** endet mit Exit `1`; ein
@@ -619,6 +691,21 @@ Minor, vier Nits — **alle übernommen**; die Einzelzeilen stehen in `## Log`.
 - **Runde 1 — B2 übernommen:** `mkdir -p` legt `~/.config` an, also Elternpfade
   in die erlaubte Menge; der frühere dritte Ort (State-Verzeichnis) fällt weg,
   weil ihn keine Stufe schreibt.
+- **2026-11-17, Stufe 4a von `docs/38` — Binary statt Node:** `check_node_version()`
+  wird `check_binary()` (Artefakt vorhanden **und** ausführbar, sonst Exit `1`
+  mit `cargo build --release --target x86_64-unknown-linux-musl`),
+  `install_binary()` kopiert nach `$HOME/.local/bin` (`0755`, über eine
+  Staging-Datei und `mv`), `guard_path()` bekommt `$HOME/.local/bin` als dritten
+  erlaubten Ort, und **die frühere `PATH`-Option entfällt ersatzlos** samt
+  Drop-in-Schreiblogik und Testfall. In `test/install.test.js` sind zwei Fälle
+  neu (`install_copiesTheBinaryToLocalBin`,
+  `install_withMissingBinary_abortsBeforeWriting`, der zweite prüft auch das
+  fehlende Ausführungsrecht), `install_withOldNode_abortsBeforeWriting` heißt
+  jetzt `install_withOldNodeOnThePath_ignoresTheVersion` und belegt, dass Node
+  keine Betriebsvoraussetzung mehr ist. Die Sandbox legt `home/browser-control/`
+  mit einem ausführbaren Ersatz-Artefakt an statt `bridge/bridge.mjs`, und
+  `runInstall` kommt ohne `path.dirname(process.execPath)` aus. Neue Zahl: **31**
+  (`22 install_` + 9 Unit-/`ExecStart_`).
 - **Runde 1 — B3 übernommen:** das 32-Zeichen-Fixture wird zur Laufzeit gebaut
   (`"ab".repeat(16)`), sonst wird der Secret-Grep der eigenen Stufe rot.
 - **Runde 1 — M1 übernommen:** der Beleg-Baukasten nennt den Datei-Operanden
