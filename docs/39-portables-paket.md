@@ -6,22 +6,27 @@ status: proposed
 # Das portable Paket
 
 Heute braucht ein neuer Nutzer einen Klon, eine Rust-Toolchain, `cargo build` und
-`./scripts/install.sh` — und danach vier Handgriffe in Firefox, die niemand
-errät. Diese Spec macht daraus: **Zip herunterladen, entpacken, Anleitung
-lesen.** Kein Compiler, kein Root, kein Dienst, kein systemd.
+`./scripts/install.sh`. Danach warten vier Handgriffe in Firefox, die niemand
+errät.
+
+Diese Spec macht daraus: **Zip herunterladen, entpacken, Anleitung lesen.** Kein
+Compiler, kein Root, kein Dienst, kein systemd.
 
 **Was sie nicht tut:** die Erweiterung signieren (Roadmap 23/24), Firefox
 mitliefern, sich als Dienst einrichten, ein Token vorab in ein Firefox-Profil
-schreiben. Die Erweiterung wird weiterhin über `about:debugging` geladen und ist
-nach einem Firefox-Neustart weg — das ist die Grenze dieses Pakets und steht in
+schreiben.
+
+Die Erweiterung lädt der Nutzer weiterhin über `about:debugging`. Nach einem
+Firefox-Neustart ist sie weg. Das ist die Grenze dieses Pakets, und sie steht in
 der Anleitung.
 
 ## Ziel
 
-- **Ein Zip je Plattform**, beide aus demselben Bau: `browser-control-<version>-linux-x86_64.zip`
-  und `browser-control-<version>-windows-x86_64.zip`.
+- **Ein Zip je Plattform**, beide aus demselben Bau:
+  `browser-control-<version>-linux-x86_64.zip` und
+  `browser-control-<version>-windows-x86_64.zip`.
 - **Alles liegt im entpackten Ordner.** Das Token entsteht beim ersten Start in
-  `./data/token`; geschrieben wird nichts außerhalb des Ordners — kein
+  `./data/token`. Geschrieben wird nichts außerhalb des Ordners: kein
   `~/.local/bin`, keine Unit, kein `~/.config`.
 - **Zwei Anleitungen, Englisch nach ASD-STE100**, geprüft mit dem Linter
   (`~/ste-lint`, Schwelle **90**): eine für Firefox, eine für die MCP-Clients
@@ -43,17 +48,17 @@ der Anleitung.
   in jedem Download derselbe Schlüssel.
 - **Kein Signieren des Binaries, keine Installer (`.deb`, `.msi`).**
 
-## Der Inhalt des Zip
+## Der Inhalt des Zips
 
 ```
 browser-control-<version>-linux-x86_64/
   browser-control-bridge          das statisch gelinkte Binary (musl)
   browser-control-<version>.xpi   die unsignierte Erweiterung
   start.sh                        Token anlegen (einmalig), Endpunkt zeigen, starten
-  README.txt                      vier Sätze: was das ist, was zu tun ist, wo die zwei Anleitungen liegen
+  README.txt                      vier Sätze Englisch: was das ist, was zu tun ist, wo die Anleitungen liegen (nicht lint-geprüft, zu kurz)
   FIREFOX.md                      Anleitung Erweiterung (Englisch, STE100)
   CLIENTS.md                      Anleitung MCP-Clients (Englisch, STE100)
-  data/                           entsteht beim ersten Start; enthält nur `token` (0600)
+  (kein data/ im Zip — es entsteht beim ersten Start im entpackten Ordner)
 ```
 
 Windows: `browser-control-bridge.exe` und `start.cmd` statt der Linux-Pendants,
@@ -62,23 +67,39 @@ sonst gleich.
 **`start.sh` — Vertrag:**
 
 1. `data/` anlegen, falls es fehlt.
-2. `data/token` anlegen, **nur wenn es fehlt**: 32 zufällige Bytes als 64
-   Hex-Zeichen, `chmod 600`. Ein vorhandenes Token wird **nie** überschrieben —
-   sonst wäre jeder Neustart ein Logout der Erweiterung.
+2. `data/token` anlegen, **nur wenn es fehlt**: 32 Bytes aus einem
+   kryptografischen Zufall (`openssl rand -hex 32`, Rückfall `head -c 32
+   /dev/urandom | od -An -tx1 | tr -d ' \n'`), `chmod 600`. Ein vorhandenes Token
+   wird **nie** überschrieben — sonst wäre jeder Neustart ein Logout der
+   Erweiterung.
 3. `BC_TOKEN_FILE` auf `data/token` setzen, `BC_BIND`/`BC_HTTP_PORT` aus der
    Umgebung durchlassen (Vorgaben `127.0.0.1:8110`/`8111`).
-4. Endpunkt und Token **einmal** auf stdout zeigen (der Nutzer muss sie in
-   Firefox und im Client eintragen), danach `exec` auf das Binary mit `--http`.
-   Kein `nohup`, keine PID-Datei: das Skript ist der Prozess, Strg+C beendet ihn.
+4. Genau **drei Zeilen** auf stdout zeigen, in dieser Form — der Nutzer trägt
+   sie in Firefox und im Client ein, die Kriterien greppen sie:
 
-**`start.cmd` — derselbe Vertrag** für Windows (Token über `certutil` oder
-PowerShell, kein WSL).
+   ```
+   endpoint: ws://127.0.0.1:8110
+   http: http://127.0.0.1:8111/mcp
+   token: <64 hex>
+   ```
+
+   (Ports aus `BC_BIND`/`BC_HTTP_PORT`, sichtbar als das, was gilt.) Danach
+   `exec` auf das Binary mit `--http`. Kein `nohup`, keine PID-Datei: das Skript
+   ist der Prozess, Strg+C beendet ihn.
+
+**`start.cmd` — derselbe Vertrag** für Windows, **ohne WSL**, mit **CRLF**-
+Zeilenenden (auf Linux gebaut wäre das Zip sonst LF, und `cmd.exe` stolpert).
+Token aus einem CSPRNG, nicht aus `Get-Random`:
+`[System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)` → Hex →
+`data\token`.
 
 ## Die zwei Anleitungen
 
 Beide **Englisch**, **ASD-STE100**: nummerierte Schritte, Befehlsform, höchstens
 20 Wörter je Anweisung, ein Name je Sache, Warnung **vor** dem Schritt. Sie
-liegen im Repo unter `docs/portable/` und werden ins Zip kopiert.
+liegen im Repo unter `docs/portable/` (kein `NN-`-Präfix und kein Frontmatter: es
+sind Nutzertexte, keine Specs — `docs/README.md` regelt Spec-Dateien,
+`scripts/check.mjs` prüft nur Code) und werden ins Zip kopiert.
 
 **`FIREFOX.md` — was drinstehen muss:**
 
@@ -106,6 +127,12 @@ liegen im Repo unter `docs/portable/` und werden ins Zip kopiert.
    hier nicht genannt sind (Server-URL, Kopfzeile `Authorization: Bearer …`).
 6. Ein Schlusssatz: dasselbe Token gilt für Firefox **und** den Client.
 
+## Abgrenzung
+
+Der **CI-Ablauf** (Jobs, lokaler Nachbau, Release-Anhang) steht in
+`docs/40-ci-ablauf.md`. Diese Spec liefert das Zip und die Anleitungen. `docs/40`
+prüft und veröffentlicht sie. Zwei Inkremente, zwei Specs (`CONTRIBUTING.md`).
+
 ## Dependency changes
 
 **Keine.** Das Zip enthält nur, was schon gebaut wird (`bridge-rs`, die XPI aus
@@ -119,40 +146,54 @@ Fehlt das Werkzeug, endet die Prüfung mit Exit **2** — sie darf nicht still
 
 | Datei | Fall | Was er beweist |
 |---|---|---|
-| `test/bundle.test.js` | `bundle_linuxZip_shouldContainExactlyTheSevenEntries` | Binary, XPI, `start.sh`, `README.txt`, `FIREFOX.md`, `CLIENTS.md` — und nichts sonst (kein `data/`, kein `target/`, keine `.git`) |
-| `test/bundle.test.js` | `bundle_windowsZip_shouldContainTheExeAndTheCmd` | dieselbe Liste mit `.exe` und `start.cmd` |
-| `test/bundle.test.js` | `bundle_shouldNotCarryAToken` | kein Eintrag enthält 32+ Hex-Zeichen; das Token entsteht erst beim Start |
-| `test/bundle.test.js` | `startSh_shouldCreateTheTokenOnceAndKeepIt` | erster Lauf legt `data/token` an (0600, 64 Hex), zweiter Lauf lässt es unverändert |
-| `test/bundle.test.js` | `startSh_shouldRefuseATooShortToken` | ein vorhandenes 8-Zeichen-Token führt zu Exit **2** (die Bridge-Regel, nicht eine eigene) |
-| `test/bundle.test.js` | `startSh_shouldNotWriteOutsideItsFolder` | nach dem Lauf ist außerhalb des entpackten Ordners nichts Neues (Sandbox-`HOME`) |
-| `scripts/ste-lint.mjs` (Prüflauf) | `FIREFOX.md`, `CLIENTS.md` ⇒ Score ≥ 90, `language: en` | die Anleitungen sind STE100, nicht nur behauptet |
-| `test/bundle.test.js` | `guides_shouldPassTheSteLintThreshold` | ruft denselben Prüfer auf; fehlt `~/ste-lint`, ist der Fall **übersprungen mit Exit 2**, nicht grün |
+| `test/bundle/bundle.test.js` | `bundle_linuxZip_shouldContainExactlyTheSevenEntries` | sechs Dateien (Binary, XPI, `start.sh`, `README.txt`, `FIREFOX.md`, `CLIENTS.md`) plus Ordner-Eintrag — und nichts sonst (kein `data/`, kein `target/`, keine `.git`) |
+| `test/bundle/bundle.test.js` | `bundle_windowsZip_shouldContainTheExeAndTheCmd` | dieselbe Liste mit `.exe` und `start.cmd` |
+| `test/bundle/bundle.test.js` | `bundle_shouldNotCarryAToken` | kein Eintrag enthält 32+ Hex-Zeichen; das Token entsteht erst beim Start |
+| `test/bundle/bundle.test.js` | `startSh_shouldCreateTheTokenOnceAndKeepIt` | erster Lauf legt `data/token` an (0600, 64 Hex), zweiter Lauf lässt es unverändert |
+| `test/bundle/bundle.test.js` | `startSh_shouldRefuseATooShortToken` | ein vorhandenes 8-Zeichen-Token führt zu Exit **2** (die Bridge-Regel, nicht eine eigene) |
+| `test/bundle/bundle.test.js` | `startSh_shouldNotWriteOutsideItsFolder` | nach dem Lauf ist außerhalb des entpackten Ordners nichts Neues (Sandbox-`HOME`) |
+| `test/bundle/bundle.test.js` | `guides_shouldPassTheSteLintThreshold` | ruft den Prüfer auf: je Datei `score ≥ 90`, `metrics.errors == 0`, `metrics.stepSentences == 0`. Fehlt der Linter, wird der Fall **gezählt übersprungen** (`{ skip: "ste-lint fehlt" }`, wie `test/package.test.js`), nicht stillschweigend grün |
+| `test/bundle/bundle.test.js` | `startSh_shouldNotDeriveTheTokenFromTimeOrPid` | zwei frische Ordner ⇒ zwei **verschiedene** Tokens (kein `$RANDOM`, kein `date`) |
 
 ## Acceptance criteria
 
 1. **Zwei Zips aus einem Befehl.** `scripts/bundle.sh` ⇒
    `dist/browser-control-<version>-linux-x86_64.zip` und
-   `…-windows-x86_64.zip`; `unzip -l` zeigt je **sieben** Einträge (sechs
-   Dateien plus Ordner), keine `target/`-Reste, keine `.git`.
-2. **Kein Geheimnis im Zip.** `unzip -l … | grep -c 'data/'` ⇒ 0 und
-   `unzip -p … start.sh | grep -cE '[0-9a-f]{32,}'` ⇒ 0.
-3. **Es läuft ohne Installation.** In einem temporären Ordner entpackt:
-   `./start.sh` ⇒ Log zeigt `listening on 127.0.0.1:8110 log=info` **und**
-   `listening on 127.0.0.1:8111 for POST /mcp`; `data/token` existiert mit 0600
-   und 64 Zeichen; `curl -s -o /dev/null -w '%{http_code}' -X POST
-   http://127.0.0.1:8111/mcp` ⇒ `401` (ohne Token) bzw. `200` (mit Token).
-4. **Nichts außerhalb des Ordners.** Nach dem Lauf ist in einem Sandbox-`HOME`
-   nichts entstanden (`find "$SANDBOX" -newer …` ⇒ leer), und der echte
-   `~/.config/browser-control/` bleibt unberührt.
-5. **Das Token überlebt.** Zweiter Start ⇒ dieselbe Token-Zeile, `cmp` auf die
-   Datei ⇒ identisch; `stat -c %a` ⇒ `600`.
+   `…-windows-x86_64.zip`; `unzip -l` zeigt je **sieben** Einträge: **sechs
+   Dateien** (Binary, XPI, `start.sh`, `README.txt`, `FIREFOX.md`, `CLIENTS.md`)
+   **plus den Ordner-Eintrag** der obersten Ebene — kein `data/`, keine
+   `target/`-Reste, keine `.git`.
+2. **Kein Geheimnis im Zip.** `unzip -Z1 … | grep -cE '(^|/)data/'` ⇒ 0 und
+   `unzip -p … start.sh | grep -acE '[0-9a-f]{32,}'` ⇒ 0.
+3. **Es läuft ohne Installation.** In einem temporären Ordner entpackt, mit
+   **freien Ports** (auf dem Betreiber-Rechner gehören 8110/8111 dem Dienst):
+   `BC_BIND=127.0.0.1:18117 BC_HTTP_PORT=18118 ./start.sh & PID=$!` ⇒ das Log
+   enthält (Teilstring, mit Zeitstempel davor) `listening on 127.0.0.1:18117
+   log=info` **und** `listening on 127.0.0.1:18118 for POST /mcp`; `data/token`
+   existiert mit 0600 und 64 Zeichen; `curl -s -o /dev/null -w '%{http_code}'
+   -X POST http://127.0.0.1:18118/mcp` ⇒ `401` (ohne Token) bzw. `200` (mit
+   Token). **Beenden: `kill $PID`** — niemals `pkill -f`, das trifft den Dienst
+   (`CONTRIBUTING.md`).
+4. **Nichts außerhalb des Ordners.** Vor dem Lauf eine Marker-Datei anlegen
+   (`touch "$SANDBOX/marker"`), nach dem Lauf `find "$SANDBOX" -newer
+   "$SANDBOX/marker" -print` ⇒ leer; und die Prüfsumme der echten
+   `~/.config/browser-control/token` ist vor und nach dem Lauf gleich
+   (`sha256sum` beideausgeben, vergleichen). Schreibvorgänge in `/tmp` und
+   `XDG_*` sind nicht Vertragsgegenstand.
+5. **Das Token überlebt.** Zweiter Start ⇒ `grep -c '^token: '` liefert dieselben
+   64 Zeichen wie beim ersten (Vergleich über die Datei), `cmp` auf eine Kopie
+   ⇒ identisch; `stat -c %a` ⇒ `600`.
 6. **Die Anleitungen sind STE100.** `node scripts/ste-lint.mjs
-   docs/portable/FIREFOX.md docs/portable/CLIENTS.md --language en` ⇒ Score ≥ 90
-   je Datei, keine `procedural`-Befunde; fehlt der Linter, Exit **2**.
-7. **Der Release hängt sie an.** `.github/workflows/release.yml` baut bei einem
-   Tag `v*` beide Zips und lädt sie ans Release (`gh release upload` mit
-   `GITHUB_TOKEN`); der Workflow läuft `scripts/bundle.sh`, nicht eine zweite
-   Bauanleitung.
+   docs/portable/FIREFOX.md docs/portable/CLIENTS.md --language en` ⇒ je Datei
+   `score ≥ 90`, `metrics.errors == 0`, `metrics.stepSentences == 0` (drei
+   Zahlen, die der Prüfer wirklich liefert — `findings` gibt es nicht). Fehlt der
+   Linter, endet das Skript mit Exit **2**; im Test wird der Fall gezählt
+   übersprungen.
+7. **Beide Zips tragen dieselbe Version**, und die kommt aus **einer** Quelle:
+   `extension/manifest.json` (`scripts/package.sh` liest sie dort schon).
+   Beweis: `unzip -l dist/browser-control-<v>-linux-x86_64.zip | grep -c
+   'browser-control-<v>.xpi'` ⇒ 1, dasselbe für das Windows-Zip, und
+   `<v>` = `node -p 'require("./extension/manifest.json").version'`.
 8. **Der Rest bleibt grün.** `npm test` ⇒ `# fail 0`, `# cancelled 0`,
    `# skipped 0`; `npm run check` ⇒ 0; `scripts/parity.sh --impl rust --check`
    ⇒ 7/7, Exit 0; Secret-Grep beidseitig Exit 1.
@@ -162,7 +203,8 @@ Fehlt das Werkzeug, endet die Prüfung mit Exit **2** — sie darf nicht still
 **Stufe 1 — Vorlagen und Startskripte**
 
 Dateien: `deploy/portable/start.sh`, `deploy/portable/start.cmd`,
-`deploy/portable/README.txt`, `scripts/bundle.sh`.
+`deploy/portable/README.txt`, `scripts/bundle.sh` (ein Name für das
+Bündel-Skript: `bundle.sh`, nicht „Bundel").
 
 `start.sh` erfüllt den Vertrag oben; `start.cmd` dasselbe für Windows. `bundle.sh`
 baut nichts (das Binary muss gebaut sein, sonst Exit 1 mit dem Befehl), ruft
@@ -181,29 +223,37 @@ Inhalt nach dem Abschnitt oben, Englisch, STE100. `scripts/ste-lint.mjs` importi
 `${STE_LINT_DIR:-$HOME/ste-lint}/src/index.js` und gibt je Datei Score und Befunde
 aus; Exit 2 ohne Linter, Exit 1 unter der Schwelle.
 
-Beweis: `node scripts/ste-lint.mjs docs/portable/*.md --language en` ⇒ Score ≥ 90.
+Beweis: `node scripts/ste-lint.mjs docs/portable/*.md --language en` ⇒ je Datei
+`score ≥ 90`, `metrics.errors == 0`, `metrics.stepSentences == 0`.
 
 **Stufe 3 — Tests**
 
-Dateien: `test/bundle.test.js` (die sieben Fälle aus `## Testing`), `package.json`
-(Testdatei ist über `test/*.test.js` schon erfasst).
+Dateien: `test/bundle/bundle.test.js` (die acht Fälle aus `## Testing`),
+`package.json` (neues Skript `"test:bundle": "node --test test/bundle/*.test.js"`).
 
-Beweis: `node --test --test-reporter=tap test/bundle.test.js` ⇒ `# fail 0`.
+**`npm test` bleibt binary-frei:** die Datei liegt in einem Unterordner, den
+`test/*.test.js` nicht erfasst; die CI ruft `npm run test:bundle` im
+`bundle`-Job auf (`docs/40`). Wer sie unter `test/` legte, machte die Node-Suite
+von einem gebauten Binary abhängig.
 
-**Stufe 4 — Release und Doku**
+Beweis: `npm run test:bundle` ⇒ `# fail 0` (und `# skipped 0`, wenn der Linter da
+ist — sonst genau 1).
 
-Dateien: `.github/workflows/release.yml`, `README.md` (ein Absatz „Portable, no
-installation"), `INSTALL.md` (Verweis auf das Zip als kürzesten Weg),
-`docs/README.md` (Status-Zelle), `docs/PROJECT-STATE.md`, `CHANGELOG.md`.
+**Stufe 4 — Release-Anhang und Doku**
 
-Beweis: Workflow-Datei vorhanden und `act -j bundle` **oder** der Betreiber-Tag;
-`grep -c 'browser-control-.*-linux-x86_64.zip' .github/workflows/release.yml` ⇒ 1.
+Dateien: `.github/workflows/release.yml` (Job `release` bei Tag `v*`, Details in
+`docs/40-ci-ablauf.md`), `README.md` (ein Absatz „Portable, no installation"),
+`INSTALL.md` (Verweis auf das Zip als kürzesten Weg), `docs/README.md`
+(Status-Zelle), `docs/PROJECT-STATE.md`, `CHANGELOG.md`.
+
+Beweis: der Betreiber-Push mit Tag zeigt die Zips am Release — der einzige
+Beweis, den niemand lokal führen kann; lokal prüft `docs/40` den Rest.
 
 ## Bekannte Lücken
 
 - **Die Erweiterung bleibt temporär.** Nach einem Firefox-Neustart muss der
-  Nutzer sie neu laden. Das ist der Preis für „keine Signierung" (Roadmap 23/24,
-  die MV3 voraussetzt).
+  Nutzer sie neu laden. Das ist der Preis für „keine Signierung" (Roadmap 23/24;
+  die MV3-Migration steht dort als 26–28 **nach** der Signierung, nicht davor).
 - **Windows ist gebaut, nicht gelaufen.** `start.cmd` und der `.exe`-Weg sind
   Betreiber-Messungen auf einem Windows-Rechner.
 - **`about:debugging` ist Handarbeit.** Kein Skript darf dorthin — die Anleitung
