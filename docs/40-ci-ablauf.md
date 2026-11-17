@@ -1,5 +1,5 @@
 ---
-description: Der Ablauf in GitHub Actions — Bridge bauen und gegen die sieben Artefakte messen, portables Zip bauen, an ein Release hängen; lokal nachbaubar.
+description: Der Ablauf in GitHub Actions — Unit-Tests ohne Browser, ein Blackbox-Test auf Windows, der Firefox startet, die XPI installiert und über MCP eine Seite öffnet, dazu Zip-Bau und Release.
 status: proposed
 ---
 
@@ -7,198 +7,232 @@ status: proposed
 
 **Befund 2026-11-17:** `.github/workflows/test.yml` läuft `npm run check` und
 `npm test` auf Node 22 und 24 — sonst nichts. Kein `cargo`, kein
-`scripts/parity.sh`.
+`scripts/parity.sh`, keine Installation. Seit dem Schnitt (`docs/38`) sagt der
+grüne Haken also nichts über die Bridge, die tatsächlich läuft.
 
-Seit dem Schnitt (`docs/38`) sagt der grüne Haken also nichts über die Bridge,
-die tatsächlich läuft. Ein Portierungsfehler im Hub fiele erst beim Betreiber
-auf. Das ist genau die Sorte Fehler, gegen die der Paritätsmaßstab gebaut wurde.
+Diese Spec teilt die Prüfung in zwei ungleiche Hälften:
 
-Diese Spec schließt das. Sie ist der Altlast-Fix und die Voraussetzung dafür,
-dass `docs/39` (das portable Zip) einen Release-Anhang bekommen kann.
+- **Unit-Tests** — schnell, ohne Browser, bei jedem Push. Sie prüfen den Code.
+- **Ein Blackbox-Workflow** — auf Windows, mit echtem Firefox. Er prüft die
+  Installation von außen: Firefox starten, XPI installieren, über MCP eine Seite
+  öffnen, und **die Seite selbst** meldet sich beim Testserver.
 
-**Was sie nicht tut:** keinen Windows-Runner, keine Branch-Protection, keinen
-Cache, keine zweite Bauanleitung. Der Workflow ruft dieselben Skripte auf, die
-auf dem Betreiber-Rechner laufen.
+Dazu kommen Zip-Bau und Release-Anhang für `docs/39`.
+
+**Was sie nicht tut:** keinen Stil-Lint (STE100 ist Schreibregel, kein
+Prüfschritt), keine Windows-Dienst-Prüfung, keinen Cache, keine
+Branch-Protection.
 
 ## Ziel
 
-- **Die Bridge wird bei jedem Push und Pull Request geprüft:** `cargo build`
-  (`--release`, musl **und** windows-gnu), `cargo test -- --test-threads=1`,
-  `clippy --all-targets -- -D warnings` für beide Ziele, `scripts/parity.sh
-  --impl rust --check` ⇒ 7/7 und `--self-test` ⇒ 7/7 rot.
-- **Das Zip wird gebaut und getestet**, sobald die Bridge grün ist.
-- **Ein Tag `v*` hängt beide Zips an das Release.**
-- **Der Ablauf ist lokal nachbaubar** — dieselben Befehle, in derselben
-  Reihenfolge, über `scripts/ci-local.sh`. Wer ihn ändert, ändert das Skript;
-  der Workflow zitiert es.
-- **Die YAML wird geprüft**, nicht nur geschrieben (`actionlint`).
+- **`unit`-Job, browserfrei:** `npm run check`, `npm test`, `cargo test
+  -- --test-threads=1`, `cargo clippy --all-targets -- -D warnings` (beide
+  Ziele), `scripts/parity.sh --impl rust --check` ⇒ 7/7, `--self-test` ⇒ 7/7 rot.
+- **`e2e`-Job, Windows, Blackbox:** die Kette aus `## Der E2E-Ablauf` läuft und
+  endet mit dem Beacon-Treffer. Das ist der Beweis „eine Seite wurde in Firefox
+  geöffnet".
+- **`bundle`-Job:** baut die zwei Zips aus `docs/39` und lädt sie als Artefakt.
+- **`release`-Job:** nur bei Tag `v*`, hängt beide Zips an das GitHub-Release.
+- **Lokal nachbaubar:** `scripts/ci-local.sh` fährt `unit` und `bundle`; den
+  E2E fährt `scripts/e2e/run.mjs` — auf Linux mit demselben Ablauf, den CI auf
+  Windows nimmt.
 
 ## Non-goals
 
-- **Kein Windows-Runner.** `x86_64-pc-windows-gnu` wird auf `ubuntu-latest`
-  gekreuzt; das Binary wird gebaut und gelintet, nicht gestartet (dieselbe
-  Grenze wie `docs/38`, Stufe 3).
-- **Kein Cache.** `actions/cache` auf `~/.cargo` und `bridge-rs/target` wäre eine
-  neue Abhängigkeit im Sinne von `CONTRIBUTING.md`; die Entscheidung steht unter
-  `## Open questions`.
-- **Keine Branch-Protection, kein Required-Status.** Das ist eine Einstellung im
-  Repository, nicht im Baum.
-- **Kein `act`.** Der lokale Nachbau ist ein Shell-Skript mit denselben
-  Befehlen, kein Container-Runner.
+- **Kein Stil-Lint.** Kein `ste-lint`, kein `actionlint`-Zwang, keine
+  Schwellenprüfung für Prosa.
+- **Kein Windows-Dienst.** Task Scheduler, Autostart und `GetFileType` bleiben
+  Betreiber-Messungen (`docs/38`, Stufe 3).
+- **Kein Cache, keine Branch-Protection, kein `act`.**
+- **Kein Signieren** der XPI — der E2E nutzt eine **Test-XPI** (siehe unten).
+
+## Der E2E-Ablauf
+
+Der Ablauf ist am 2026-11-17 **lokal gemessen** (Linux, Firefox 152, Rust-Bridge
+auf 18810/18811):
+
+```
+Installed /tmp/e2e/ext as a temporary add-on
+extension connected peer=127.0.0.1 protocol=1     (4 s nach dem Start)
+open tab=2 url=http://127.0.0.1:18990/page
+PING 2026-11-17T15:15:48.205Z                     (die Seite selbst)
+```
+
+Die Schritte, in dieser Reihenfolge:
+
+1. **Bridge-Binary bereitstellen.** Im `e2e`-Job das Artefakt aus dem
+   `rust`-Job (`x86_64-pc-windows-gnu`, `--release`), damit geprüft wird, was
+   ausgeliefert wird.
+2. **Token erzeugen** (32 Bytes Zufall, 64 Hex) in eine Datei; `BC_TOKEN_FILE`
+   darauf zeigen.
+3. **Test-XPI bauen:** `extension/` in ein Temp-Verzeichnis kopieren und **zwei
+   Zeilen** patchen — der Endpunkt (`ws://127.0.0.1:18810`) und das Token als
+   Rückfallwert. Beide Patches werden **gezählt** (`grep -c` ⇒ genau 1); findet
+   ein Patch seine Zeile nicht, endet der Test mit „seam moved" und Exit 1.
+   Die ausgelieferte Erweiterung bleibt unverändert.
+4. **Bridge starten:** `BC_BIND=127.0.0.1:18810 BC_HTTP_PORT=18811
+   browser-control-bridge --http`, Ausgabe in eine Logdatei.
+5. **Beacon-Server starten** (Node, Port 18990): liefert `/page` mit einem
+   eingebetteten `fetch("/ping")` und merkt sich den Treffer.
+6. **Firefox starten** mit der Test-XPI: `npx web-ext@8.9.0 run --source-dir
+   <temp> --firefox <pfad> --arg=-headless --no-reload --no-input`. Das ist
+   derselbe Weg wie „Load Temporary Add-on" — nur ohne Klick.
+7. **Warten auf `extension connected`** in der Bridge-Logdatei, Deckel 60 s.
+8. **Über MCP eine Seite öffnen:** `POST http://127.0.0.1:18811/mcp` mit
+   `tools/call` → `browser_open_tab` und `{"url":"http://127.0.0.1:18990/page"}`.
+9. **Auf den Beacon warten**, Deckel 30 s. **Das ist der Beweis:** die Bridge
+   könnte lügen, die geladene Seite nicht.
+10. **Aufräumen per PID** (`kill $PID`), auch im Fehlerfall. **Niemals
+    `pkill -f`** — der Betreiber-Dienst hat dieselbe Kommandozeile, und genau
+    das hat am 17.11. den Dienst zweimal beendet (einmal durch einen Agenten,
+    einmal durch den Orchestrator selbst).
+
+**Warum der Patch und kein Klick:** die Erweiterung liest Endpunkt und Token nur
+aus `storage.local`; `about:debugging` lässt sich nicht per Skript bedienen.
+`web-ext` installiert die Erweiterung temporär — genau das, was der Knopf tut —
+und der Patch ersetzt die zwei Werte, die sonst jemand eintippen müsste.
+Gemessen: ohne den Endpunkt-Patch verbindet sie sich nach `ws://127.0.0.1:8110`
+und der Test scheitert mit `auth failed` am Betreiber-Dienst.
+
+**Ports und Fristen im E2E:**
+
+| Was | Wert |
+|---|---|
+| Extension-Port | `18810` (nicht 8110 — dort läuft der Dienst des Betreibers) |
+| `/mcp` | `18811` |
+| Beacon | `18990` |
+| Verbinden | Deckel 60 s, dann Abbruch |
+| Beacon | Deckel 30 s, dann Abbruch |
+| `web-ext` | gepinnt `8.9.0`, Start ~4 s |
 
 ## Die Jobs
 
-| Job | Auslöser | Schritte |
+| Job | Läuft auf | Schritte |
 |---|---|---|
-| `node` | Push, PR | `actions/checkout`, `actions/setup-node` (Matrix 22/24), `npm run check`, `npm test` — **unverändert** und ohne Rust |
-| `rust` | Push, PR | checkout, `dtolnay/rust-toolchain` **oder** rustup (stable, `--profile minimal`, Ziele `x86_64-unknown-linux-musl` + `x86_64-pc-windows-gnu`, Teil `clippy`), `sudo apt-get install -y gcc-mingw-w64-x86-64`, `actions/setup-node` (für `parity.sh` und `package.sh`), `cargo build --release` für beide Ziele, `cargo test -- --test-threads=1`, `clippy -D warnings --all-targets` für beide Ziele, `scripts/parity.sh --impl rust --check`, `scripts/parity.sh --self-test`, `actions/upload-artifact` mit den zwei Binaries |
-| `bundle` | nach `rust` | checkout, `download-artifact` (die zwei Binaries), `setup-node`, `scripts/bundle.sh`, `npm run test:bundle`, `node scripts/ste-lint.mjs docs/portable/*.md --language en` (mit `STE_LINT_DIR` aus einem gepinnten Klon), `upload-artifact` mit beiden Zips |
-| `release` | nur Tag `v*`, nach `bundle` | `download-artifact`, `permissions: contents: write`, `GH_TOKEN: ${{ github.token }}`, `gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --clobber` |
+| `node` | `ubuntu-latest`, Matrix 22/24 | checkout, setup-node, `npm run check`, `npm test` — unverändert, ohne Rust |
+| `unit` | `ubuntu-latest` | checkout, Node (für `parity.sh`), rustup (stable, Ziele `x86_64-unknown-linux-musl` + `x86_64-pc-windows-gnu`, Teil `clippy`), `gcc-mingw-w64-x86-64`, `cargo build --release` (beide Ziele), `cargo test -- --test-threads=1`, `clippy -D warnings --all-targets` (beide Ziele), `parity.sh --impl rust --check`, `parity.sh --self-test`, Binaries als Artefakt |
+| `e2e` | `windows-latest`, braucht `unit` | checkout, Node (für `web-ext` und den Beacon), `download-artifact` (die `.exe`), `node scripts/e2e/run.mjs` — der Ablauf oben |
+| `bundle` | `ubuntu-latest`, braucht `unit` | checkout, `download-artifact`, `scripts/bundle.sh`, `npm run test:bundle`, Zips als Artefakt |
+| `release` | nur Tag `v*`, braucht `bundle` | `download-artifact`, `permissions: contents: write`, `GH_TOKEN`, `gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --clobber` |
 
-**Vier Zeilen, die man sonst vergisst und die deshalb hier stehen:**
+**Vier Zeilen, die man sonst vergisst:**
 
-1. **`permissions: contents: write`** auf Job-Ebene für `release` — der
-   Default-`GITHUB_TOKEN` neuer Repositories ist `contents: read`, und
-   `gh release create` scheitert mit 403.
-2. **`--release`** überall dort, wo das Binary entsteht: `scripts/parity.sh`
-   sucht `…/target/<ziel>/release/browser-control-bridge`, ein Debug-Build lässt
-   den Paritätslauf mit „rust binary missing" stehen.
-3. **Die Binaries wandern als Artefakt** vom `rust`- in den `bundle`-Job.
-   `bundle.sh` baut nichts (Vertrag in `docs/39`); ohne Upload/Download fehlt ihm
-   die Quelle und es endet mit Exit 1.
-4. **`--test-threads=1`** beim Rust-Test: echte Bridges binden Ports, und
-   `cargo test` fährt Fälle einer Datei parallel (die Node-Suite läuft aus
-   demselben Grund mit `--test-concurrency=1`).
+1. **`--release`** überall: `parity.sh` sucht `…/target/<ziel>/release/…`; ein
+   Debug-Build lässt den Lauf mit „rust binary missing" stehen.
+2. **Artefakt-Upload/-Download** zwischen `unit` → `e2e` und `unit` → `bundle`.
+   `bundle.sh` und der E2E bauen nichts selbst.
+3. **`--test-threads=1`** beim Rust-Test: echte Bridges binden Ports.
+4. **`permissions: contents: write`** im `release`-Job: der Default-Token ist
+   `read`, `gh release create` scheitert mit 403.
 
-**`ste-lint` in CI:** `git clone --depth 1 --branch v0.1.7
-https://github.com/adrianhoehne/ste-lint /tmp/ste-lint`, dann
-`STE_LINT_DIR=/tmp/ste-lint`. Der Tag ist derselbe wie lokal; `scripts/ste-lint.mjs`
-gibt die geladene Version aus und endet mit Exit **2**, wenn sie vom erwarteten
-Tag abweicht. Kein `|| true`.
+## Lokal nachbauen
 
-## Der lokale Nachbau
-
-`scripts/ci-local.sh` fährt die Reihenfolge des `rust`- und `bundle`-Jobs mit
-denselben Befehlen:
+`scripts/ci-local.sh` fährt `unit` und `bundle`:
 
 ```
-rustup target add … / rustup component add clippy
-apt-Prüfung: x86_64-w64-mingw32-gcc vorhanden (sonst Hinweis, Exit 1)
-cargo build --release --target x86_64-unknown-linux-musl
-cargo build --release --target x86_64-pc-windows-gnu
+cargo build --release --target x86_64-unknown-linux-musl / -windows-gnu
 cargo test -- --test-threads=1
 cargo clippy --all-targets -- -D warnings            (beide Ziele)
 bash scripts/parity.sh --impl rust --check
 bash scripts/parity.sh --self-test
 bash scripts/bundle.sh
 npm run test:bundle
-node scripts/ste-lint.mjs docs/portable/*.md --language en
-actionlint .github/workflows/*.yml
 → "ci-local: alle Schritte grün"
 ```
 
-Zwei Schalter: `--only <name>` (einen Schritt fahren) und `--skip-network` (der
-`ste-lint`-Klon entfällt). Mit `--skip-network` meldet der Lint-Schritt Exit 2,
-und das Skript endet rot — bewusst, nicht als `|| true`.
-
-**Was der lokale Nachbau nicht kann:** den Runner. `actionlint` prüft Syntax und
-Ausdrücke, nicht das Verhalten von `actions/checkout` oder `upload-artifact`.
-Der erste Push ist der echte Beweis. Deshalb existiert jeder Schritt auch lokal.
+`node scripts/e2e/run.mjs` fährt den Blackbox-Ablauf; er nimmt Firefox und das
+Binary aus der Umgebung (`E2E_FIREFOX`, `E2E_BINARY`) und funktioniert auf Linux
+wie auf Windows. `--keep` lässt die Prozesse stehen, `--windows` setzt die
+Windows-Pfade.
 
 ## Testing
 
 | Datei | Fall | Was er beweist |
 |---|---|---|
-| `test/ci/workflow.test.js` | `workflow_rustJob_shouldBuildBothTargetsInRelease` | die YAML enthält `--release` und beide Ziele — gefunden über `run:`-Zeilen, nicht über Kommentare |
-| `test/ci/workflow.test.js` | `workflow_bundleJob_shouldDownloadTheBinaries` | `upload-artifact` im `rust`-, `download-artifact` im `bundle`-Job |
-| `test/ci/workflow.test.js` | `workflow_releaseJob_shouldAskForWritePermissions` | `permissions: contents: write` und `gh release create` |
-| `test/ci/workflow.test.js` | `workflow_parityRunsAfterTheBuild` | die Reihenfolge im `rust`-Job: Build vor `parity.sh` |
-| `scripts/ci-local.sh` | der Lauf selbst | die Befehle funktionieren in dieser Reihenfolge (Exit 0, Schlusszeile) |
-| `scripts/ste-lint.mjs` | `ste-lint-version mismatch` | die Version im Klon ist die gepinnte (Exit 2 sonst) |
-
-Die Workflow-Fälle lesen die YAML als **Text** (kein YAML-Parser als
-Abhängigkeit) und prüfen `run:`-Zeilen — ein Kommentar `# cargo test` darf sie
-nicht erfüllen.
+| `test/ci/workflow.test.js` | `workflow_unitJob_shouldBuildBothTargetsInRelease` | die YAML enthält `--release` und beide Ziele, gefunden über `run:`-Zeilen (ein Kommentar erfüllt das nicht) |
+| `test/ci/workflow.test.js` | `workflow_e2eJob_shouldRunOnWindowsAndUseTheScript` | `runs-on: windows-latest` und ein `run:` mit `scripts/e2e/run.mjs` |
+| `test/ci/workflow.test.js` | `workflow_e2eJob_shouldDownloadTheBinary` | `download-artifact` im `e2e`-Job |
+| `test/ci/workflow.test.js` | `workflow_releaseJob_shouldAskForWritePermissions` | `contents: write` und `gh release create` |
+| `test/ci/workflow.test.js` | `workflow_shouldNotContainAStyleLinter` | kein `ste-lint`, kein `actionlint` — die Entscheidung ist gepinnt, nicht nur notiert |
+| `scripts/e2e/run.mjs` | der Lauf selbst (lokal) | Verbindung, `browser_open_tab`, Beacon-Treffer |
+| `scripts/e2e/run.mjs` | `--self-check` | der Seam-Patch findet seine zwei Zeilen; sonst Exit 1 mit „seam moved" |
 
 ## Acceptance criteria
 
-1. **CI prüft die Bridge.** Beweis:
-   `grep -cE '^\s*- run: .*(cargo (build|test|clippy)|parity\.sh)' .github/workflows/test.yml`
-   ⇒ **≥ 5**, und `grep -c 'x86_64-pc-windows-gnu' .github/workflows/test.yml`
-   ⇒ **≥ 1**.
-2. **Der lokale Nachbau ist grün.** `bash scripts/ci-local.sh; echo $?` ⇒
-   Schlusszeile `ci-local: alle Schritte grün`, Exit **0**.
-3. **Die YAML ist sauber.** `actionlint .github/workflows/*.yml; echo $?` ⇒ **0**
-   (Version **1.7.7**, Bezug über `scripts/ci-local.sh --install-actionlint`,
-   das die Version prüft).
-4. **Ein Job baut die Zips, einer hängt sie an.** Beweis:
-   `grep -c 'upload-artifact' .github/workflows/test.yml` ⇒ **≥ 2** (Binaries,
-   Zips), `grep -c 'download-artifact'` ⇒ **≥ 2**, und
-   `grep -c 'gh release create' .github/workflows/release.yml` ⇒ **1**.
-5. **Das Release hat Schreibrechte.** `grep -c 'contents: write'
-   .github/workflows/release.yml` ⇒ **1**.
-6. **`npm test` bleibt binary-frei.** `npm test` läuft in einem Baum ohne
-   `bridge-rs/target/` ⇒ grün (`# fail 0`); die Bundle-Fälle laufen nur über
-   `npm run test:bundle`.
-7. **Der Rest bleibt grün.** `npm run check` ⇒ 0; `scripts/parity.sh --impl rust
-   --check` ⇒ 7/7; Secret-Grep beidseitig Exit 1.
+1. **Der E2E läuft lokal und beweist die Seite.** `node scripts/e2e/run.mjs`
+   ⇒ Exit **0**, Ausgabe enthält `extension connected`, `open tab=` und
+   `beacon hit`. Ohne Beacon-Treffer Exit 1.
+2. **Der Beacon ist unabhängig.** Ein Lauf mit absichtlich falschem Token
+   (`E2E_TOKEN=kaputt`) ⇒ Exit 1, **kein** `beacon hit` — die Bridge kann den
+   Test nicht bestehen, indem sie nur „ok" antwortet.
+3. **Der Seam ist gepinnt.** `node scripts/e2e/run.mjs --self-check` ⇒ Exit 0;
+   wird eine der zwei Zeilen in `background.js` umbenannt, ⇒ Exit 1 mit
+   `seam moved`.
+4. **Unit und E2E sind getrennt.** `grep -c 'scripts/e2e/run.mjs'
+   .github/workflows/test.yml` ⇒ **1**, und dieser Job läuft auf
+   `windows-latest`; der `unit`-Job nennt `runs-on: ubuntu-latest` und enthält
+   **kein** `firefox`.
+5. **Kein Stil-Lint in der CI.** `grep -cE 'ste-lint|actionlint'
+   .github/workflows/*.yml` ⇒ **0**.
+6. **Der Unit-Job prüft den Code.** `grep -cE '^\s*- run: .*(cargo
+   (build|test|clippy)|parity\.sh)' .github/workflows/test.yml` ⇒ **≥ 5**.
+7. **Der Release hängt die Zips an.** `grep -c 'gh release create'
+   .github/workflows/release.yml` ⇒ **1**, `grep -c 'contents: write'` ⇒ **1**.
+8. **Der Rest bleibt grün.** `npm test` ⇒ `# fail 0`, `# cancelled 0`;
+   `npm run check` ⇒ 0; `parity.sh --impl rust --check` ⇒ 7/7; Secret-Grep
+   beidseitig Exit 1.
 
 ## Dev plan
 
-**Stufe 1 — `ci-local.sh` und der Linter-Aufruf**
+**Stufe 1 — `scripts/e2e/run.mjs` und der lokale Beweis**
 
-Dateien: `scripts/ci-local.sh`, `scripts/ste-lint.mjs` (aus `docs/39`, Stufe 2 —
-hier zuerst gebraucht), `deploy/actions/actionlint-version` (eine Zeile, die
-Version).
+Dateien: `scripts/e2e/run.mjs`, `scripts/e2e/beacon.mjs` (der Testserver),
+`scripts/e2e/build-test-extension.mjs` (Kopie + zwei Patches mit `grep -c`).
 
-Beweis: `bash scripts/ci-local.sh --only clippy` ⇒ grün;
-`bash scripts/ci-local.sh` ⇒ Schlusszeile, Exit 0 (der Lint-Schritt darf hier
-noch Exit 2 melden, solange `docs/portable/*.md` fehlt — dann ist Stufe 2 dran).
+Das Skript fährt die zehn Schritte, endet mit `beacon hit` oder einem
+benannten Fehler, räumt per PID auf. `--self-check` prüft nur die zwei
+Patch-Zeilen.
 
-**Stufe 2 — der `rust`-Job**
+Beweis: Kriterien 1–3, auf Linux gemessen (der Ablauf oben ist der Messwert).
 
-Dateien: `.github/workflows/test.yml` (Job `rust` ergänzt, `node` unverändert).
+**Stufe 2 — der `unit`-Job und `scripts/ci-local.sh`**
 
-Beweis: Kriterium 1; `actionlint` ⇒ 0; `bash scripts/ci-local.sh --only rust`
-⇒ grün.
+Dateien: `.github/workflows/test.yml` (Job `unit` ergänzt, `node` unverändert),
+`scripts/ci-local.sh`.
 
-**Stufe 3 — `bundle`- und `release`-Job**
+Beweis: Kriterium 6; `bash scripts/ci-local.sh` ⇒ Schlusszeile, Exit 0.
 
-Dateien: `.github/workflows/test.yml` (Job `bundle`), `.github/workflows/release.yml`,
-`test/ci/workflow.test.js`, `package.json` (`test:ci`).
+**Stufe 3 — der `e2e`-Job**
 
-Beweis: Kriterien 4, 5; `npm run test:ci` ⇒ `# fail 0`.
+Dateien: `.github/workflows/test.yml` (Job `e2e`), `test/ci/workflow.test.js`,
+`package.json` (`test:ci`).
 
-**Stufe 4 — Doku und der erste echte Lauf**
+Beweis: Kriterien 4 und 5; `npm run test:ci` ⇒ `# fail 0`.
 
-Dateien: `CONTRIBUTING.md` (der CI-Ablauf in der Abnahme), `README.md`
-(Build-Status-Satz, der stimmt), `docs/PROJECT-STATE.md`, `CHANGELOG.md`.
+**Stufe 4 — `bundle` und `release`**
 
-Beweis: der Push — vier Jobs im Actions-Lauf, `rust` und `bundle` grün. Das ist
-der einzige Beweis, den niemand lokal führen kann, und er gehört in den Bericht
-des Betreibers, nicht in ein Kriterium dieses Dokuments.
+Dateien: `.github/workflows/test.yml` (Job `bundle`), `.github/workflows/release.yml`.
+
+Beweis: Kriterium 7; der erste Push zeigt den `e2e`-Lauf auf Windows.
 
 ## Bekannte Lücken
 
-- **Der erste echte Lauf steht aus.** Alles hier ist lokal nachgebaut; ob
-  `actions/checkout` und `upload-artifact` tun, was sie sollen, zeigt erst der
-  Push.
-- **Windows wird gebaut, nicht gestartet** — dieselbe Grenze wie `docs/38`,
-  Stufe 3.
-- **Kein Cache:** der `rust`-Job lädt bei jedem Lauf die Registry neu. Langsam,
-  aber ohne neue Abhängigkeit.
+- **Der Windows-E2E ist hier nicht gelaufen** — gemessen ist der identische
+  Ablauf auf Linux (Firefox 152). Der erste `windows-latest`-Lauf ist der
+  Beweis; deshalb hat das Skript `--windows` und benannte Fehler.
+- **`web-ext` ist eine neue Werkzeugabhängigkeit** (npm, gepinnt `8.9.0`, MPL-2.0)
+  — nur im E2E, nicht im Produkt.
+- **Der Seam ist ein Textpatch** auf zwei Zeilen in einer Kopie. Er ist gezählt
+  und bricht laut, aber er ist kein Vertrag: ändert jemand die Zeile, muss der
+  Patch nach.
+- **Kein Signieren, kein Dienst:** der E2E prüft den Handstart, nicht den
+  Autostart.
 
 ## Open questions
 
-1. **Darf `actionlint` als Prüfwerkzeug dazukommen** (Version 1.7.7, MIT,
-  heruntergeladen von GitHub-Releases)? Es steht in keinem Produktpfad, aber es
-  ist eine neue Abhängigkeit im Sinne von `CONTRIBUTING.md` — und ohne es prüft
-  niemand die YAML außer GitHub selbst.
-2. **Darf `actions/cache` für `~/.cargo` und `bridge-rs/target` dazu?** Es
-  verkürzt den `rust`-Job deutlich, ist aber eine Abhängigkeit mehr.
-
-Beide Fragen beantwortet der Betreiber; bis dahin gilt: `actionlint` ja/nein
-entscheidet Kriterium 3, Cache bleibt bis zur Antwort weg.
+**Keine.** Entschieden am 2026-11-17: Test-XPI mit eingebautem Token (kein
+Managed Storage, kein Klick auf die Optionsseite), `web-ext` statt
+`geckodriver`, kein Stil-Lint, Unit und E2E getrennt.
 
 ## Review
 
@@ -207,8 +241,14 @@ entscheidet Kriterium 3, Cache bleibt bis zur Antwort weg.
 ## Log
 
 - **2026-11-17, Betreiberfrage:** „können wir den Ablauf in git actions auch
-  nachbauen und testen?" — ja, und der Befund dazu: CI prüft die Bridge heute
-  gar nicht.
+  nachbauen und testen?" — ja; der Befund dazu: CI prüft die Bridge heute gar
+  nicht.
+- **2026-11-17, Betreiberentscheid:** CI soll die **Installation** prüfen —
+  Windows, Firefox, XPI installieren, über MCP eine Seite öffnen; Ziel ist der
+  Nachweis, dass die Seite in Firefox geöffnet wurde. Der Rest sind Unit-Tests
+  und läuft separat.
+- **2026-11-17, Betreiberentscheid:** kein automatischer STE100-Lint.
+- **2026-11-17, Messung:** der Ablauf ist lokal gelaufen (Linux, Firefox 152):
+  `extension connected` nach 4 s, `open tab=2`, Beacon-Treffer 4 s später.
 - **2026-11-17, Abspaltung:** dieser Abschnitt war Teil von `docs/39`; der
-  Spec-Review hat ihn dort als zweites Inkrement beanstandet (M8) und die
-  Teilung verlangt.
+  Spec-Review hat ihn dort als zweites Inkrement beanstandet (M8).

@@ -28,10 +28,13 @@ der Anleitung.
 - **Alles liegt im entpackten Ordner.** Das Token entsteht beim ersten Start in
   `./data/token`. Geschrieben wird nichts außerhalb des Ordners: kein
   `~/.local/bin`, keine Unit, kein `~/.config`.
-- **Zwei Anleitungen, Englisch nach ASD-STE100**, geprüft mit dem Linter
-  (`~/ste-lint`, Schwelle **90**): eine für Firefox, eine für die MCP-Clients
-  (pi, Codex, OpenCode plus ein generisches Muster). Der Nutzer muss danach
-  nichts weiter wissen als das, was dort steht.
+- **Zwei Anleitungen, Englisch nach ASD-STE100**: eine für Firefox, eine für die
+  MCP-Clients (pi, Codex, OpenCode plus ein generisches Muster). Der Nutzer muss
+  danach nichts weiter wissen als das, was dort steht.
+
+  **Kein automatischer Lint:** STE100 ist eine Schreibregel, kein Prüfschritt
+  (Betreiberentscheid 2026-11-17). Wer die Anleitungen ändert, liest sie gegen
+  die Regeln — nummerierte Schritte, Befehlsform, höchstens 20 Wörter.
 - **Die Anleitungen haben eine Quelle.** Sie liegen im Repo und werden vom
   Bündel-Skript ins Zip kopiert — keine zwei Fassungen, die auseinanderlaufen.
 - **Der Release hängt die Zips an.** Ein Tag `v*` baut beide und legt sie ans
@@ -135,12 +138,8 @@ prüft und veröffentlicht sie. Zwei Inkremente, zwei Specs (`CONTRIBUTING.md`).
 
 ## Dependency changes
 
-**Keine.** Das Zip enthält nur, was schon gebaut wird (`bridge-rs`, die XPI aus
-`scripts/package.sh`). Der Linter ist ein **Prüfwerkzeug**, keine
-Produktabhängigkeit: `~/ste-lint` (MIT, lokal installiert, Node ≥ 20), im Repo
-erreichbar über `scripts/ste-lint.mjs` mit `STE_LINT_DIR` als Überschreibung.
-Fehlt das Werkzeug, endet die Prüfung mit Exit **2** — sie darf nicht still
-übersprungen werden.
+**Keine.** Das Zip enthält nur, was schon gebaut wird: `bridge-rs` und die XPI
+aus `scripts/package.sh`.
 
 ## Testing
 
@@ -152,7 +151,6 @@ Fehlt das Werkzeug, endet die Prüfung mit Exit **2** — sie darf nicht still
 | `test/bundle/bundle.test.js` | `startSh_shouldCreateTheTokenOnceAndKeepIt` | erster Lauf legt `data/token` an (0600, 64 Hex), zweiter Lauf lässt es unverändert |
 | `test/bundle/bundle.test.js` | `startSh_shouldRefuseATooShortToken` | ein vorhandenes 8-Zeichen-Token führt zu Exit **2** (die Bridge-Regel, nicht eine eigene) |
 | `test/bundle/bundle.test.js` | `startSh_shouldNotWriteOutsideItsFolder` | nach dem Lauf ist außerhalb des entpackten Ordners nichts Neues (Sandbox-`HOME`) |
-| `test/bundle/bundle.test.js` | `guides_shouldPassTheSteLintThreshold` | ruft den Prüfer auf: je Datei `score ≥ 90`, `metrics.errors == 0`, `metrics.stepSentences == 0`. Fehlt der Linter, wird der Fall **gezählt übersprungen** (`{ skip: "ste-lint fehlt" }`, wie `test/package.test.js`), nicht stillschweigend grün |
 | `test/bundle/bundle.test.js` | `startSh_shouldNotDeriveTheTokenFromTimeOrPid` | zwei frische Ordner ⇒ zwei **verschiedene** Tokens (kein `$RANDOM`, kein `date`) |
 
 ## Acceptance criteria
@@ -183,12 +181,10 @@ Fehlt das Werkzeug, endet die Prüfung mit Exit **2** — sie darf nicht still
 5. **Das Token überlebt.** Zweiter Start ⇒ `grep -c '^token: '` liefert dieselben
    64 Zeichen wie beim ersten (Vergleich über die Datei), `cmp` auf eine Kopie
    ⇒ identisch; `stat -c %a` ⇒ `600`.
-6. **Die Anleitungen sind STE100.** `node scripts/ste-lint.mjs
-   docs/portable/FIREFOX.md docs/portable/CLIENTS.md --language en` ⇒ je Datei
-   `score ≥ 90`, `metrics.errors == 0`, `metrics.stepSentences == 0` (drei
-   Zahlen, die der Prüfer wirklich liefert — `findings` gibt es nicht). Fehlt der
-   Linter, endet das Skript mit Exit **2**; im Test wird der Fall gezählt
-   übersprungen.
+6. **Die Anleitungen sind vollständig.** Beweis (Struktur, nicht Stil):
+   `grep -c '^1\.' docs/portable/FIREFOX.md docs/portable/CLIENTS.md` ⇒ je **1**
+   (jede Anleitung beginnt mit Schritt 1), und `grep -c '^[0-9]\+\. ' …` ⇒ je
+   **≥ 5**. Die Regeln selbst prüft niemand automatisch.
 7. **Beide Zips tragen dieselbe Version**, und die kommt aus **einer** Quelle:
    `extension/manifest.json` (`scripts/package.sh` liest sie dort schon).
    Beweis: `unzip -l dist/browser-control-<v>-linux-x86_64.zip | grep -c
@@ -216,19 +212,17 @@ Beweis: `bash scripts/bundle.sh` ⇒ zwei Zips; `unzip -l` zeigt die Soll-Liste;
 
 **Stufe 2 — Die zwei Anleitungen**
 
-Dateien: `docs/portable/FIREFOX.md`, `docs/portable/CLIENTS.md`,
-`scripts/ste-lint.mjs`.
+Dateien: `docs/portable/FIREFOX.md`, `docs/portable/CLIENTS.md`.
 
-Inhalt nach dem Abschnitt oben, Englisch, STE100. `scripts/ste-lint.mjs` importiert
-`${STE_LINT_DIR:-$HOME/ste-lint}/src/index.js` und gibt je Datei Score und Befunde
-aus; Exit 2 ohne Linter, Exit 1 unter der Schwelle.
+Inhalt nach dem Abschnitt oben, Englisch, STE100 — als Schreibregel, ohne
+Prüfskript.
 
-Beweis: `node scripts/ste-lint.mjs docs/portable/*.md --language en` ⇒ je Datei
-`score ≥ 90`, `metrics.errors == 0`, `metrics.stepSentences == 0`.
+Beweis: Kriterium 6 (Struktur) und ein Probelauf durch den Betreiber: Zip
+entpacken, Anleitung abarbeiten, Seite öffnen.
 
 **Stufe 3 — Tests**
 
-Dateien: `test/bundle/bundle.test.js` (die acht Fälle aus `## Testing`),
+Dateien: `test/bundle/bundle.test.js` (die sieben Fälle aus `## Testing`),
 `package.json` (neues Skript `"test:bundle": "node --test test/bundle/*.test.js"`).
 
 **`npm test` bleibt binary-frei:** die Datei liegt in einem Unterordner, den
@@ -236,8 +230,7 @@ Dateien: `test/bundle/bundle.test.js` (die acht Fälle aus `## Testing`),
 `bundle`-Job auf (`docs/40`). Wer sie unter `test/` legte, machte die Node-Suite
 von einem gebauten Binary abhängig.
 
-Beweis: `npm run test:bundle` ⇒ `# fail 0` (und `# skipped 0`, wenn der Linter da
-ist — sonst genau 1).
+Beweis: `npm run test:bundle` ⇒ `# fail 0`, `# skipped 0`.
 
 **Stufe 4 — Release-Anhang und Doku**
 
@@ -274,7 +267,8 @@ entschieden.
 - **2026-11-17, Betreiberentscheid:** Weg **C** — portables Zip mit Server und
   XPI, Erweiterung über `about:debugging`; kein mitgeliefertes Firefox
   (Weg A) und keine Signierung (Weg B) in diesem Inkrement.
-- **2026-11-17, Betreiberentscheid:** Anleitungen **Englisch nach STE100**,
-  geprüft mit `~/ste-lint`, Schwelle 90.
+- **2026-11-17, Betreiberentscheid:** Anleitungen **Englisch nach STE100** — als
+  Schreibregel, **ohne** automatischen Lint (kein `ste-lint` in CI, kein
+  Prüfskript im Repo).
 - **2026-11-17, Betreiberentscheid:** MCP-Hauptweg ist der **HTTP-Endpunkt**;
   Clients pi, Codex, OpenCode plus ein generisches Muster.
