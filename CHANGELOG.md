@@ -7,6 +7,22 @@ Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 Nichts offen.
 
+## [0.5.1] — 2026-11-17
+
+**Die Firefox-Anleitung führt jetzt zum richtigen Ort.** `about:debugging`
+installiert ein temporäres Add-on, zeigt aber nur **Reload** und **Remove** —
+einen Einstellungs-Link gibt es dort nicht. `FIREFOX.md` sagte „open the
+settings" und schickte jeden neuen Nutzer damit ins Leere.
+
+- `docs/portable/FIREFOX.md`: Schritt 5 öffnet **`about:addons` → Browser
+  Control → Preferences**; Schritt 9 nennt **Reload** beim Namen.
+- Die Warnung verweist jetzt auf die Schritte 2 bis 4 statt 3 bis 9 und sagt,
+  dass Firefox Endpunkt und Token im Profil behält — mit dem Hinweis, sie nach
+  einem Reload zu prüfen, statt es zu versprechen.
+- `INSTALL.md` nennt `about:addons` als **primären** Weg; das Kontextmenü-Icon
+  fehlt bei einem temporären Add-on oft.
+- Sonst unverändert: Binary und Erweiterung sind identisch mit 0.5.0.
+
 ## [0.5.0] — 2026-11-17
 
 **Die Bridge ist Rust.** Der Node-Prozess ist ersetzt durch ein statisch
