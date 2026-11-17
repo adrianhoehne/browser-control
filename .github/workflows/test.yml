@@ -126,8 +126,6 @@ jobs:
       # `--clobber` gehört zu `gh release upload`, nicht zu `create` (der erste
       # Tag-Lauf am 2026-11-17 ist daran gescheitert). Der zweite Zweig macht einen
       # erneuten Lauf idempotent: Release anlegen, sonst die Dateien ersetzen.
-      - run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --verify-tag \
-            || gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber
+      - run: gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --verify-tag || gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber
         env:
           GH_TOKEN: ${{ github.token }}
