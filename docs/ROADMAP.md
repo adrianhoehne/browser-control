@@ -4,7 +4,7 @@ Was als Nächstes kommt, in der Reihenfolge, in der es gebaut werden soll. Kein
 Spec-Ersatz: jede Zeile wird beim Bauen zu `docs/NN-….md` mit Ziel, Kriterien
 und Dev-Plan. Diese Datei sagt nur, *was* und *warum jetzt*.
 
-Stand 2026-11-15, nach Spec 36 (`docs/36-standard-endpunkt.md`).
+Stand 2026-11-17, nach Spec 38 (`docs/38-rust-port.md`) — der Port ist der einzige Implementierungsbaum.
 **Reihenfolge-Regel des Betreibers: Funktionalität zuerst, Sicherheit und
 Betrieb ganz ans Ende.** Und keine Zeile ist „groß": was groß wäre, ist hier in
 mittlere und kleine Schritte geteilt, damit jedes Inkrement in einem Zug durch
@@ -52,6 +52,8 @@ werden nicht neu vergeben.
 | `33-spurwahl.md`, `34-spurendatei-beobachten.md` | 17 | Teil 2: die Originalspur, über eine mitgeschnittene `timedtext`-Datei |
 | `35-installationsskript.md` | — (Betrieb) | `scripts/install.sh` — Token, Unit, Dienst, Prüfung in einem Befehl |
 | `36-standard-endpunkt.md` | 31 (Teil) | Standard-Endpunkt `ws://127.0.0.1:8110`, sichtbar vorbelegt |
+| `37-rust-bridge.md` | 26–28 (Teil) | Paritätsmaßstab: sieben eingecheckte Artefakte, `--check` 7/7, `--self-test` 7/7 rot |
+| `38-rust-port.md` | 26–28 (Teil) | Die Bridge ist Rust: Werkzeugschicht, Hub, WebSocket, `POST /mcp`, Windows-Seite, Unit und Installer auf das Binary, `bridge/` gelöscht |
 
 Gestrichen, mit Datum und Grund in der jeweiligen Zeile: **21** (Token-Rotation,
 Handarbeit statt Code — Anleitung in `INSTALL.md`, `### Token wechseln`) und
