@@ -147,10 +147,14 @@ schlimmer); fehlen `zip`/`unzip`, skippen die zwei Zip-Fälle wie in
 3. **Kein Geheimnis im Zip.** `unzip -Z1 … | grep -cE '(^|/)data/'` ⇒ 0 und
    `unzip -p … start.sh | grep -acE '[0-9a-f]{32,}'` ⇒ 0.
 
-**Kriterien 4, 5 und 7 beobachten denselben Lauf.** Vor dem Start `mkdir -p
-"$SANDBOX/home"` und `touch "$SANDBOX/marker"`; gestartet wird in Kriterium 4,
-`kill $PID` steht am Ende von Kriterium 7. Kriterium 6 ist der zweite Start im
-selben Ordner (mit `kill` davor). `run.log` liegt fest in `$SANDBOX/run.log`.
+**Ein Lauf, zwei Beobachtungen.** Vorweg: `export SANDBOX="$(mktemp -d)"`,
+dann `mkdir -p "$SANDBOX/home"` und `touch "$SANDBOX/marker"`, dann `sleep 1`
+(`find -newer` sieht sonst nichts, was in derselben Sekunde entsteht).
+
+**Kriterien 4 und 5 beobachten den ersten Lauf**, **Kriterium 7 den zweiten**;
+`kill $PID` steht jeweils am Ende (4: nicht beenden, 6: vor dem Neustart).
+
+`run.log` liegt fest in `$SANDBOX/run.log`.
 
 4. **Es läuft ohne Installation.** In einem temporären Ordner entpackt, mit
    **freien Ports außerhalb der reservierten Bereiche** — 8110/8111 gehören dem

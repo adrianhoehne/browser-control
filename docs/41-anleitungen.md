@@ -113,7 +113,7 @@ fehlender Schritt auffällt:
 | Datei | Fall | Was er beweist |
 |---|---|---|
 | `test/bundle/bundle.test.js` | `guides_shouldBeNumberedFromOne` | beide Dateien beginnen mit `1.` und haben je Datei die in Kriterium 1 geforderte Mindestzahl numerierter Schritte |
-| `test/bundle/bundle.test.js` | `guides_shouldNameThePrintedLines` | die zwei **Literale** `127.0.0.1:8110` und `127.0.0.1:8111` aus den Vorgaben von `deploy/portable/start.sh` stehen wörtlich in den Anleitungen — nicht nur das Etikett `http: ` |
+| `test/bundle/bundle.test.js` | `guides_shouldNameThePrintedLines` | gepaart: `FIREFOX.md` trägt `127.0.0.1:8110`, `CLIENTS.md` trägt `127.0.0.1:8111` — je Datei das, was sie braucht, nicht beide in beiden |
 
 ## Acceptance criteria
 
@@ -162,8 +162,9 @@ Beweis: Kriterien 1, 2, 4.
 
 **Stufe 3 — Struktur-Tests und Zip**
 
-Setzt `docs/39`, Stufe 1 voraus (dort entstehen `scripts/bundle.sh` und
-`test/bundle/bundle.test.js`).
+Setzt `docs/39`, Stufe 1 voraus (`scripts/bundle.sh`) und **legt
+`test/bundle/bundle.test.js` mit den zwei Fällen an**; `docs/39` Stufe 2 ergänzt
+die sieben Zip-Fälle.
 
 Dateien: `test/bundle/bundle.test.js` (die zwei Fälle aus `## Testing`),
 `scripts/bundle.sh` (kopiert `docs/portable/*.md` ins Zip).
