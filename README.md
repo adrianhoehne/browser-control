@@ -1,5 +1,12 @@
 # browser-control
 
+> **Unmaintained — this is the frozen Manifest V2 line (0.5.1).**
+>
+> Development continues in **[browser-control-mv3](https://github.com/adrianhoehne/browser-control-mv3)**:
+> Manifest V3, a signed release (`v0.6.1`), a working `browser_eval` and a
+> portable Linux/Windows package. Install from there — this version will not get
+> another release.
+
 A Firefox extension drives your **visible, logged-in browser**, and a small
 bridge exposes that browser as an **MCP server** for agents. The agent works in
 its own tab — one you can watch — with your logins, your cookies and your
